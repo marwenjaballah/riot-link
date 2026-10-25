@@ -15,6 +15,13 @@ class Config:
     APP_VERSION = "1.0.0"
     APP_TAGLINE = "1-Click Account Switcher • 2FA Persistent • 100% Anti-Cheat Safe"
 
+    # Branding & Repository
+    AUTHOR_NAME = "Marwen Jaballah"
+    AUTHOR_GITHUB = "https://github.com/marwenjaballah"
+    GITHUB_REPO = "marwenjaballah/riot-link"
+    GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"
+    GITHUB_API_LATEST_RELEASE = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
     # Application data directory (in %APPDATA%/RiotLink)
     APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "RiotLink"
     PROFILES_DIR = APP_DATA_DIR / "profiles"

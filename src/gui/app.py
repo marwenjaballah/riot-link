@@ -3,16 +3,26 @@ Main Application Window for Riot Account Switcher.
 Responsive, modern gaming dashboard with custom icon and direct controls.
 """
 
+import webbrowser
+import threading
 from pathlib import Path
 from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image
 
 from .theme import Theme
-from .components.dialogs import AddAccountModal, EditAccountModal, SettingsModal, GuideModal, RiotClientSetupModal
+from .components.dialogs import (
+    AddAccountModal,
+    EditAccountModal,
+    SettingsModal,
+    GuideModal,
+    RiotClientSetupModal,
+    UpdateModal,
+)
 from .components.account_card import AccountCard
 from ..session_manager import SessionManager
 from ..process_manager import ProcessManager
+from ..updater import UpdateManager
 from ..config import Config
 from ..models import AccountProfile, AppSettings
 
@@ -39,12 +49,16 @@ class RiotAccountSwitcherApp(ctk.CTk):
         # State
         self.search_query = ""
         self.active_account_id = None
+        self._available_update = None
 
         self._build_layout()
         self._refresh_ui()
 
         # Verify Riot Client path on first run / startup
         self.after(350, self._check_initial_riot_path)
+
+        # Check for updates in background (non-blocking)
+        self.after(2500, self._check_updates_background)
 
         # Periodic status check (every 3 seconds)
         self.after(3000, self._periodic_status_check)
@@ -252,25 +266,34 @@ class RiotAccountSwitcherApp(ctk.CTk):
             text_color=Theme.TEXT_MUTED
         )
         self.footer_path_lbl.pack(side="left")
-        # App Version Badge on the right (Clean native desktop style)
-        version_frame = ctk.CTkFrame(footer_inner, fg_color="transparent")
-        version_frame.pack(side="right")
 
-        pulse_dot = ctk.CTkLabel(
-            version_frame,
-            text="●",
-            font=ctk.CTkFont(size=9),
-            text_color="#10b981"
+        # Developer Signature (Center, clickable GitHub link)
+        self.signature_btn = ctk.CTkButton(
+            footer_inner,
+            text=f"Developed with ❤️ by {Config.AUTHOR_NAME}",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            fg_color="transparent",
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.TEXT_SECONDARY,
+            height=28,
+            corner_radius=6,
+            command=lambda: webbrowser.open(Config.AUTHOR_GITHUB)
         )
-        pulse_dot.pack(side="left", padx=(0, 5))
+        self.signature_btn.pack(side="left", expand=True)
 
-        version_lbl = ctk.CTkLabel(
-            version_frame,
-            text=f"v{Config.APP_VERSION} • Stable",
+        # App Version & Update Badge on the right (Clickable)
+        self.version_btn = ctk.CTkButton(
+            footer_inner,
+            text=f"● v{Config.APP_VERSION}",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            text_color=Theme.TEXT_MUTED
+            fg_color="transparent",
+            hover_color=Theme.SURFACE_HOVER,
+            text_color="#10b981",
+            height=28,
+            corner_radius=6,
+            command=self._handle_manual_check_updates
         )
-        version_lbl.pack(side="left")
+        self.version_btn.pack(side="right")
 
     def _refresh_ui(self):
         """Re-render account cards and update status badges."""
@@ -619,6 +642,52 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         ProcessManager.launch(Path(path_str), product=product)
         self._refresh_ui()
+
+    def _check_updates_background(self):
+        """Check for updates silently in a background daemon thread."""
+        def run_check():
+            try:
+                rel = UpdateManager.check_for_updates(timeout=4.0)
+                if rel:
+                    self.after(0, lambda: self._on_update_found(rel, auto=True))
+            except Exception:
+                pass
+
+        threading.Thread(target=run_check, daemon=True).start()
+
+    def _handle_manual_check_updates(self):
+        """Manually check for updates when user clicks version or settings button."""
+        self.version_btn.configure(text="Checking...", text_color=Theme.TEXT_MUTED)
+
+        def run_check():
+            try:
+                rel = UpdateManager.check_for_updates(timeout=5.0)
+                if rel:
+                    self.after(0, lambda: self._on_update_found(rel, auto=False))
+                else:
+                    self.after(0, self._on_up_to_date)
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Update Error", f"Could not check for updates:\n{e}", parent=self))
+                self.after(0, lambda: self.version_btn.configure(text=f"● v{Config.APP_VERSION}", text_color="#10b981"))
+
+        threading.Thread(target=run_check, daemon=True).start()
+
+    def _on_update_found(self, release_info: dict, auto: bool = False):
+        self._available_update = release_info
+        tag = release_info.get("tag", "new")
+        self.version_btn.configure(
+            text=f"⚡ Update {tag} Available",
+            text_color="#f59e0b"
+        )
+        UpdateModal(self, release_info=release_info)
+
+    def _on_up_to_date(self):
+        self.version_btn.configure(text=f"● v{Config.APP_VERSION}", text_color="#10b981")
+        messagebox.showinfo(
+            "Up to Date",
+            f"You are running the latest version of Riot Link (v{Config.APP_VERSION})!\n\nNo updates are needed.",
+            parent=self
+        )
 
     def _open_guide_modal(self):
         GuideModal(self)

@@ -22,6 +22,7 @@
 * **📲 2FA Persistent**: Authenticate Two-Factor Authentication once—Riot remembers your PC and bypasses 2FA on subsequent switches.
 * **🎯 Direct Game Shortcuts**: Dedicated `LoL` and `VAL` buttons to jump straight into League of Legends or VALORANT.
 * **🔄 Intelligent Logout Detection**: If an account gets signed out in Riot Client, Riot Link detects it, alerts you, and provides a 1-click re-linking flow.
+* **🔄 Seamless In-App Updates**: Automatically checks GitHub Releases and performs a 1-click in-place update and restart.
 * **🎮 Profile Customization**: Organize accounts with tags (`Main`, `Smurf`, `Ranked`, `Casual`) and custom accent colors.
 * **💻 Standalone Executable**: Portable single `.exe` with zero installation required.
 
@@ -30,15 +31,15 @@
 ## 📥 Download & Install
 
 ### Option A: Standalone Executable (Recommended)
-1. Go to the [**Releases**](https://github.com/marweneb/riot-account-switcher/releases) page on GitHub.
+1. Go to the [**Releases**](https://github.com/marwenjaballah/riot-link/releases) page on GitHub.
 2. Download **`RiotLink.exe`** (or `RiotLink-v1.0.0-windows-x64.zip`).
 3. Run `RiotLink.exe`! No installation needed.
 
 ### Option B: Run from Source
 ```powershell
 # Clone the repository
-git clone https://github.com/marweneb/riot-account-switcher.git
-cd riot-account-switcher
+git clone https://github.com/marwenjaballah/riot-link.git
+cd riot-link
 
 # Install dependencies
 pip install -r requirements.txt
@@ -111,6 +112,12 @@ This project includes a production-ready GitHub Actions workflow ([`.github/work
 - Automatically triggered on version tags (`v*`, e.g. `git tag v1.0.0 && git push origin v1.0.0`).
 - Can also be triggered manually via **GitHub Actions → Run workflow**.
 - Builds the standalone Windows x64 binary, computes SHA256 checksums, and publishes a GitHub Release with downloadable artifacts.
+
+---
+
+## 👨‍💻 Author & Credits
+
+Developed with ❤️ by **[Marwen Jaballah](https://github.com/marwenjaballah)**.
 
 ---
 

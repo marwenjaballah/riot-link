@@ -2,8 +2,11 @@
 CustomTkinter dialogs and modal windows for Riot Account Switcher.
 """
 
-from typing import Callable
+from typing import Callable, Optional
 from tkinter import filedialog, messagebox
+import webbrowser
+import threading
+import sys
 import customtkinter as ctk
 
 from ..theme import Theme
@@ -821,3 +824,223 @@ class GuideModal(ctk.CTkToplevel):
             command=self.destroy
         )
         got_it_btn.pack(fill="x")
+
+
+class UpdateModal(ctk.CTkToplevel):
+    """
+    Update modal that displays release notes and seamlessly downloads
+    and applies the new Riot Link executable in-place.
+    """
+    def __init__(self, parent, release_info: dict):
+        super().__init__(parent)
+        self.parent = parent
+        self.release_info = release_info
+        self.title("Riot Link Update Available")
+        self.geometry("520x480")
+        self.resizable(False, False)
+        self.configure(fg_color=Theme.BG_DARK)
+        self.transient(parent)
+        self.grab_set()
+
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width() - 520) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 480) // 2
+        self.geometry(f"+{max(0, px)}+{max(0, py)}")
+
+        self._build_ui()
+
+    def _build_ui(self):
+        # Header banner
+        header = ctk.CTkFrame(self, fg_color=Theme.SURFACE, corner_radius=0)
+        header.pack(fill="x", padx=0, pady=0)
+
+        ctk.CTkLabel(
+            header,
+            text="🎉 NEW UPDATE AVAILABLE",
+            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            text_color=Theme.ACCENT_CYAN
+        ).pack(anchor="w", padx=24, pady=(16, 4))
+
+        ctk.CTkLabel(
+            header,
+            text=f"A new version of Riot Link ({self.release_info.get('tag', '')}) is ready to install!",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w", padx=24, pady=(0, 16))
+
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=24, pady=16)
+
+        # Version Pill Row
+        ver_row = ctk.CTkFrame(content, fg_color=Theme.SURFACE, corner_radius=8, border_width=1, border_color=Theme.CARD_BORDER)
+        ver_row.pack(fill="x", pady=(0, 12))
+
+        ver_inner = ctk.CTkFrame(ver_row, fg_color="transparent")
+        ver_inner.pack(fill="x", padx=16, pady=10)
+
+        ctk.CTkLabel(
+            ver_inner,
+            text=f"Current: v{Config.APP_VERSION}",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=Theme.TEXT_MUTED
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            ver_inner,
+            text=" ➔ ",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            text_color=Theme.ACCENT_CYAN
+        ).pack(side="left", padx=8)
+
+        ctk.CTkLabel(
+            ver_inner,
+            text=f"Latest: {self.release_info.get('tag', '')}",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color="#10b981"
+        ).pack(side="left")
+
+        # Release Notes Title & Box
+        ctk.CTkLabel(
+            content,
+            text="WHAT'S NEW IN THIS VERSION",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w", pady=(0, 6))
+
+        self.notes_box = ctk.CTkTextbox(
+            content,
+            height=140,
+            fg_color=Theme.SURFACE,
+            border_width=1,
+            border_color=Theme.CARD_BORDER,
+            text_color=Theme.TEXT_PRIMARY,
+            font=ctk.CTkFont(family="Segoe UI", size=11)
+        )
+        self.notes_box.pack(fill="both", expand=True, pady=(0, 14))
+        self.notes_box.insert("1.0", self.release_info.get("notes", "No release notes."))
+        self.notes_box.configure(state="disabled")
+
+        # Progress Section (Initially hidden)
+        self.progress_frame = ctk.CTkFrame(content, fg_color="transparent")
+        
+        self.progress_lbl = ctk.CTkLabel(
+            self.progress_frame,
+            text="Preparing download...",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=Theme.TEXT_PRIMARY
+        )
+        self.progress_lbl.pack(anchor="w", pady=(0, 6))
+
+        self.progress_bar = ctk.CTkProgressBar(
+            self.progress_frame,
+            height=12,
+            fg_color=Theme.SURFACE,
+            progress_color=Theme.ACCENT_CYAN
+        )
+        self.progress_bar.pack(fill="x")
+        self.progress_bar.set(0.0)
+
+        # Action Buttons Row
+        self.btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.btn_frame.pack(fill="x", padx=24, pady=(0, 20))
+
+        self.later_btn = ctk.CTkButton(
+            self.btn_frame,
+            text="Remind Later",
+            fg_color=Theme.SURFACE,
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.TEXT_SECONDARY,
+            height=40,
+            command=self.destroy
+        )
+        self.later_btn.pack(side="left", padx=(0, 8))
+
+        self.github_btn = ctk.CTkButton(
+            self.btn_frame,
+            text="View Release",
+            fg_color=Theme.SURFACE,
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.TEXT_PRIMARY,
+            border_width=1,
+            border_color=Theme.CARD_BORDER,
+            height=40,
+            command=self._open_github
+        )
+        self.github_btn.pack(side="left", padx=(0, 8))
+
+        self.update_btn = ctk.CTkButton(
+            self.btn_frame,
+            text="⚡ Update Now",
+            fg_color=Theme.ACCENT_CYAN,
+            hover_color=Theme.ACCENT_CYAN_HOVER,
+            text_color="#000000",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            height=40,
+            command=self._start_update
+        )
+        self.update_btn.pack(side="right", expand=True, fill="x")
+
+    def _open_github(self):
+        url = self.release_info.get("html_url") or Config.GITHUB_RELEASES_URL
+        webbrowser.open(url)
+
+    def _start_update(self):
+        download_url = self.release_info.get("download_url")
+        if not download_url:
+            # If no .exe asset is attached, direct to GitHub Releases
+            messagebox.showinfo(
+                "Manual Download Required",
+                "No direct executable asset found for this release.\nOpening the release page on GitHub...",
+                parent=self
+            )
+            self._open_github()
+            self.destroy()
+            return
+
+        # Show progress bar and disable close
+        self.btn_frame.pack_forget()
+        self.progress_frame.pack(fill="x", pady=(0, 10))
+        self.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        threading.Thread(target=self._run_download, args=(download_url,), daemon=True).start()
+
+    def _run_download(self, download_url: str):
+        try:
+            from ...updater import UpdateManager
+
+            def on_progress(fraction: float, downloaded: int, total: int):
+                mb_curr = downloaded / (1024 * 1024)
+                mb_tot = total / (1024 * 1024)
+                pct = int(fraction * 100)
+                text = f"Downloading: {mb_curr:.1f} MB / {mb_tot:.1f} MB ({pct}%)"
+                self.after(0, lambda: self._update_ui_progress(fraction, text))
+
+            UpdateManager.download_and_apply_update(download_url, progress_callback=on_progress)
+            self.after(0, self._on_download_complete)
+        except Exception as e:
+            self.after(0, lambda: self._on_download_error(str(e)))
+
+    def _update_ui_progress(self, frac: float, text: str):
+        self.progress_bar.set(frac)
+        self.progress_lbl.configure(text=text)
+
+    def _on_download_complete(self):
+        self.progress_bar.set(1.0)
+        self.progress_lbl.configure(text="✅ Update applied! Restarting Riot Link...", text_color="#10b981")
+        self.after(1200, self._finish_restart)
+
+    def _finish_restart(self):
+        try:
+            self.parent.destroy()
+        except Exception:
+            pass
+        sys.exit(0)
+
+    def _on_download_error(self, err_msg: str):
+        messagebox.showerror(
+            "Update Error",
+            f"Failed to automatically update Riot Link:\n{err_msg}\n\nYou can download the latest release manually from GitHub.",
+            parent=self
+        )
+        self._open_github()
+        self.destroy()
