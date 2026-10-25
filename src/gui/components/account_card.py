@@ -45,12 +45,21 @@ class AccountCard(ctk.CTkFrame):
         on_delete: Callable[[str], None],
         **kwargs
     ):
-        border_col = Theme.CARD_ACTIVE_BORDER if is_active else Theme.CARD_BORDER
+        if account.needs_reauth:
+            border_col = "#b45309"
+            border_w = 2
+        elif is_active:
+            border_col = Theme.CARD_ACTIVE_BORDER
+            border_w = 2
+        else:
+            border_col = Theme.CARD_BORDER
+            border_w = 1
+
         super().__init__(
             parent,
             fg_color=Theme.CARD_BG,
             corner_radius=12,
-            border_width=2 if is_active else 1,
+            border_width=border_w,
             border_color=border_col,
             **kwargs
         )
@@ -122,8 +131,19 @@ class AccountCard(ctk.CTkFrame):
         )
         tag_lbl.pack(side="left", padx=(0, 8))
 
-        # Active status badge
-        if self.is_active:
+        # Status badges
+        if self.account.needs_reauth:
+            warn_badge = ctk.CTkLabel(
+                top_row,
+                text=" ⚠️ LOGGED OUT ",
+                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                fg_color="#451a03",
+                text_color="#fbbf24",
+                corner_radius=4,
+                height=20
+            )
+            warn_badge.pack(side="left")
+        elif self.is_active:
             active_badge = ctk.CTkLabel(
                 top_row,
                 text=" ● ACTIVE ",
@@ -139,34 +159,43 @@ class AccountCard(ctk.CTkFrame):
         bottom_row = ctk.CTkFrame(info_col, fg_color="transparent")
         bottom_row.pack(fill="x", anchor="w", pady=(3, 0))
 
-        if self.account.username_hint:
-            riot_id_lbl = ctk.CTkLabel(
+        if self.account.needs_reauth:
+            sub_lbl = ctk.CTkLabel(
                 bottom_row,
-                text=self.account.username_hint,
+                text="⚠️ Session revoked in Riot Client • Click 🔄 to re-link",
                 font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-                text_color=Theme.ACCENT_CYAN
+                text_color="#f59e0b"
             )
-            riot_id_lbl.pack(side="left", padx=(0, 6))
+            sub_lbl.pack(side="left")
+        else:
+            if self.account.username_hint:
+                riot_id_lbl = ctk.CTkLabel(
+                    bottom_row,
+                    text=self.account.username_hint,
+                    font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                    text_color=Theme.ACCENT_CYAN
+                )
+                riot_id_lbl.pack(side="left", padx=(0, 6))
 
-            sep_lbl = ctk.CTkLabel(
+                sep_lbl = ctk.CTkLabel(
+                    bottom_row,
+                    text="•",
+                    font=ctk.CTkFont(family="Segoe UI", size=11),
+                    text_color=Theme.TEXT_MUTED
+                )
+                sep_lbl.pack(side="left", padx=(0, 6))
+
+            game_name = Config.PRODUCTS.get(self.account.preferred_game, {}).get("name", "Riot Client")
+            last_used_str = self._format_last_used(self.account.last_used)
+
+            sub_text = f"Default: {game_name} • {last_used_str}"
+            sub_lbl = ctk.CTkLabel(
                 bottom_row,
-                text="•",
+                text=sub_text,
                 font=ctk.CTkFont(family="Segoe UI", size=11),
                 text_color=Theme.TEXT_MUTED
             )
-            sep_lbl.pack(side="left", padx=(0, 6))
-
-        game_name = Config.PRODUCTS.get(self.account.preferred_game, {}).get("name", "Riot Client")
-        last_used_str = self._format_last_used(self.account.last_used)
-
-        sub_text = f"Default: {game_name} • {last_used_str}"
-        sub_lbl = ctk.CTkLabel(
-            bottom_row,
-            text=sub_text,
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            text_color=Theme.TEXT_MUTED
-        )
-        sub_lbl.pack(side="left")
+            sub_lbl.pack(side="left")
 
         # 3. Right Action Buttons: Uniform dimensions, pixel-perfect alignment
         actions_frame = ctk.CTkFrame(inner, fg_color="transparent")
@@ -206,16 +235,31 @@ class AccountCard(ctk.CTkFrame):
         val_btn.pack(side="left", padx=2)
 
         # Primary Switch / Play button - EXACT width: 115, height: 34 on ALL cards!
-        switch_btn_text = "PLAY" if self.is_active else "SWITCH & PLAY"
+        if self.account.needs_reauth:
+            switch_btn_text = "RE-LOGIN"
+            primary_fg = "#9a3412"
+            primary_hover = "#c2410c"
+            primary_text_col = "#ffffff"
+        elif self.is_active:
+            switch_btn_text = "PLAY"
+            primary_fg = Theme.ACCENT_CYAN
+            primary_hover = Theme.ACCENT_CYAN_HOVER
+            primary_text_col = "#000000"
+        else:
+            switch_btn_text = "SWITCH & PLAY"
+            primary_fg = Theme.ACCENT_RED
+            primary_hover = Theme.ACCENT_RED_HOVER
+            primary_text_col = "#ffffff"
+
         primary_btn = ctk.CTkButton(
             actions_frame,
             text=switch_btn_text,
             width=115,
             height=34,
             corner_radius=6,
-            fg_color=Theme.ACCENT_CYAN if self.is_active else Theme.ACCENT_RED,
-            hover_color=Theme.ACCENT_CYAN_HOVER if self.is_active else Theme.ACCENT_RED_HOVER,
-            text_color="#000000" if self.is_active else "#ffffff",
+            fg_color=primary_fg,
+            hover_color=primary_hover,
+            text_color=primary_text_col,
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             command=lambda: self.on_switch(self.account.id, self.account.preferred_game)
         )
@@ -240,7 +284,11 @@ class AccountCard(ctk.CTkFrame):
         )
         edit_btn.pack(side="left", padx=2)
 
-        # Icon Button 2: Refresh Session Token (🔄)
+        # Icon Button 2: Refresh Session Token (🔄) - Highlighted if needs reauth
+        refresh_fg = "#78350f" if self.account.needs_reauth else Theme.SURFACE
+        refresh_hover = "#92400e" if self.account.needs_reauth else Theme.SURFACE_HOVER
+        refresh_border = "#d97706" if self.account.needs_reauth else Theme.CARD_BORDER
+
         refresh_btn = ctk.CTkButton(
             actions_frame,
             text="",
@@ -248,10 +296,10 @@ class AccountCard(ctk.CTkFrame):
             width=34,
             height=34,
             corner_radius=6,
-            fg_color=Theme.SURFACE,
-            hover_color=Theme.SURFACE_HOVER,
+            fg_color=refresh_fg,
+            hover_color=refresh_hover,
             border_width=1,
-            border_color=Theme.CARD_BORDER,
+            border_color=refresh_border,
             command=lambda: self.on_update_token(self.account.id)
         )
         refresh_btn.pack(side="left", padx=2)

@@ -225,6 +225,24 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self.search_entry.pack(side="right")
         self.search_entry.bind("<KeyRelease>", self._on_search_changed)
 
+        # Notice banner for logged out / reauth accounts
+        self.notice_banner = ctk.CTkFrame(
+            self,
+            fg_color="#451a03",
+            corner_radius=8,
+            border_width=1,
+            border_color="#b45309"
+        )
+        self.notice_label = ctk.CTkLabel(
+            self.notice_banner,
+            text="",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color="#fbbf24",
+            wraplength=700,
+            justify="left"
+        )
+        self.notice_label.pack(side="left", padx=14, pady=8)
+
         # 3. Main Content: Scrollable Accounts List
         self.scroll_frame = ctk.CTkScrollableFrame(
             self,
@@ -321,6 +339,19 @@ class RiotAccountSwitcherApp(ctk.CTk):
             self.active_acc_lbl.configure(text=f"Active: {display_name}")
         else:
             self.active_acc_lbl.configure(text="")
+
+        # Notice Banner for accounts requiring re-auth
+        reauth_accounts = [a for a in accounts if a.needs_reauth]
+        if reauth_accounts:
+            names = ", ".join(f"'{a.name}'" for a in reauth_accounts)
+            self.notice_label.configure(
+                text=f"⚠️ {names} was logged out in Riot Client. Sign in to Riot Client (check 'Stay signed in') and click 🔄 on the card to re-link."
+            )
+            if not self.notice_banner.winfo_ismapped():
+                self.notice_banner.pack(fill="x", padx=18, pady=(0, 10), before=self.scroll_frame)
+        else:
+            if self.notice_banner.winfo_ismapped():
+                self.notice_banner.pack_forget()
 
         # Update Footer Path (Display compact path to prevent collision)
         detected_path = self.session_mgr.settings.riot_client_path or Config.find_riot_client_path()
@@ -455,6 +486,18 @@ class RiotAccountSwitcherApp(ctk.CTk):
             messagebox.showerror("Error", f"Failed to update account: {e}", parent=self)
 
     def _handle_switch(self, account_id: str, product: str):
+        account = self.session_mgr.get_account(account_id)
+        if account and account.needs_reauth:
+            confirm = messagebox.askyesno(
+                "Account Was Logged Out",
+                f"'{account.name}' was previously signed out in Riot Client, so Riot will show the sign-in screen.\n\n"
+                "After you sign in (with 'Stay signed in' checked), click the 🔄 (Refresh) button on this card to restore 1-click switching.\n\n"
+                "Launch Riot Client now to sign in?",
+                parent=self
+            )
+            if not confirm:
+                return
+
         try:
             self.session_mgr.switch_to_account(account_id, launch_product=product, auto_launch=True)
             self._refresh_ui()
@@ -462,17 +505,40 @@ class RiotAccountSwitcherApp(ctk.CTk):
             messagebox.showerror("Switch Error", f"Failed to switch account:\n{e}", parent=self)
 
     def _handle_update_token(self, account_id: str):
+        target_acc = self.session_mgr.get_account(account_id)
+        acc_name = target_acc.name if target_acc else "this account"
+
+        if not self.session_mgr.has_active_riot_session():
+            messagebox.showwarning(
+                "Riot Client Not Logged In",
+                f"Cannot refresh or re-link '{acc_name}' because Riot Client is currently at the sign-in screen (no active session).\n\n"
+                "To re-link:\n"
+                "1. Open Riot Client and sign into this account (ensure 'Stay signed in' is checked).\n"
+                "2. Complete 2FA (if prompted).\n"
+                "3. Once you reach the home screen, click 🔄 (Refresh) again!",
+                parent=self
+            )
+            return
+
+        current_hint = self.session_mgr.extract_session_username_hint()
         confirm = messagebox.askyesno(
-            "Refresh Session Token",
-            "This will overwrite this account profile with the session currently active in Riot Client.\n\n"
-            "Use this if you recently renewed your password or 2FA.\n\nContinue?",
+            "Re-Link Session Token",
+            f"This will capture the session currently active in Riot Client and assign it to '{acc_name}'.\n\n"
+            f"Active Session Detected: {current_hint or 'Riot Session'}\n\n"
+            "This will clear the [LOGGED OUT] status and restore 1-click auto-login.\n\nContinue?",
             parent=self
         )
         if confirm:
             try:
                 self.session_mgr.update_account_session(account_id)
+                self.session_mgr.mark_account_reauth(account_id, False)
                 self._refresh_ui()
-                messagebox.showinfo("Success", "Account session token updated successfully!", parent=self)
+                messagebox.showinfo(
+                    "Re-Linked Successfully!",
+                    f"Session for '{acc_name}' has been restored and updated successfully!\n"
+                    "You can now switch to this account with 1 click.",
+                    parent=self
+                )
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to update session: {e}", parent=self)
 
@@ -496,8 +562,13 @@ class RiotAccountSwitcherApp(ctk.CTk):
             parent=self
         )
         if confirm:
-            self.session_mgr.prepare_new_login()
-            self._refresh_ui()
+            self._is_preparing_new_login = True
+            try:
+                self.session_mgr.prepare_new_login()
+                self.active_account_id = None
+                self._refresh_ui()
+            finally:
+                self._is_preparing_new_login = False
 
     def _handle_close_riot(self):
         closed = ProcessManager.close_all_riot_processes(timeout=4.0)
@@ -538,6 +609,29 @@ class RiotAccountSwitcherApp(ctk.CTk):
         active_id = self.session_mgr.get_active_account_id()
         has_session = self.session_mgr.has_active_riot_session()
         last_has_session = getattr(self, "_last_has_session", None)
+        is_preparing_new_login = getattr(self, "_is_preparing_new_login", False)
+
+        # Check for logout: User was on an active account, but now has_session is False (and it wasn't an intentional clean login preparation)
+        if self.active_account_id and not has_session and not is_preparing_new_login:
+            logged_out_id = self.active_account_id
+            logged_out_acc = self.session_mgr.get_account(logged_out_id)
+            self.active_account_id = None
+            if logged_out_acc:
+                self.session_mgr.mark_account_reauth(logged_out_id, True)
+                self._refresh_ui()
+                messagebox.showwarning(
+                    "Session Logged Out in Riot Client",
+                    f"Notice: You logged out of '{logged_out_acc.name}' in Riot Client.\n\n"
+                    "⚠️ When you click 'Sign Out' in Riot Client, Riot permanently invalidates your saved login session on their authentication servers.\n\n"
+                    f"'{logged_out_acc.name}' is now marked as [⚠️ LOGGED OUT].\n\n"
+                    "How to reconnect this account:\n"
+                    "1. Open Riot Client and sign into your account (make sure 'Stay signed in' is CHECKED).\n"
+                    f"2. Return to this app and click the highlighted 🔄 (Refresh) button on '{logged_out_acc.name}' to save your new session!\n\n"
+                    "💡 Tip: Never click 'Sign Out' in Riot Client. Always switch accounts directly inside this app!",
+                    parent=self
+                )
+                self.after(3000, self._periodic_status_check)
+                return
 
         if active_id != self.active_account_id or has_session != last_has_session:
             self._refresh_ui()

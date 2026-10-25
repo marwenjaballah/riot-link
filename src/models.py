@@ -17,6 +17,7 @@ class AccountProfile(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     last_used: str | None = None
     notes: str = ""
+    needs_reauth: bool = False
 
     def mark_used(self):
         self.last_used = datetime.now().isoformat()

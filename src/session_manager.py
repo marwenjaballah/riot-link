@@ -63,6 +63,24 @@ class SessionManager:
         accounts.sort(key=lambda acc: acc.last_used or acc.created_at, reverse=True)
         return accounts
 
+    def get_account(self, account_id: str) -> Optional[AccountProfile]:
+        """Fetch a single account profile by ID."""
+        profile_file = self.get_account_dir(account_id) / "profile.json"
+        if profile_file.is_file():
+            try:
+                with open(profile_file, "r", encoding="utf-8") as f:
+                    return AccountProfile(**json.load(f))
+            except Exception:
+                pass
+        return None
+
+    def mark_account_reauth(self, account_id: str, needs_reauth: bool = True):
+        """Mark an account as requiring re-authentication or restored."""
+        account = self.get_account(account_id)
+        if account:
+            account.needs_reauth = needs_reauth
+            self.update_account_metadata(account)
+
     def get_account_dir(self, account_id: str) -> Path:
         return Config.PROFILES_DIR / account_id
 
@@ -209,6 +227,7 @@ class SessionManager:
         with open(meta_file, "r", encoding="utf-8") as f:
             account = AccountProfile(**json.load(f))
         account.mark_used()
+        account.needs_reauth = False
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(account.model_dump(), f, indent=2, ensure_ascii=False)
 

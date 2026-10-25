@@ -53,10 +53,14 @@ python main.py
 #### What happens if I have 2FA (Two-Factor Authentication)?
 You only enter your 2FA code **once** when saving the account with "Stay signed in" checked. Riot's servers remember that your computer is authorized, so switching accounts skips the 2FA prompt automatically!
 
-#### What if Riot asks me to log in again after a few months?
-Riot sessions occasionally refresh after 60–90 days. If that happens:
-1. Log into that account normally once in Riot Client.
-2. In the Switcher app, click the **`•••`** menu on the account card and select **`Refresh Session`**. You're set for another few months!
+#### What if Riot asks me to log in again or I get logged out?
+Riot sessions occasionally expire after 60–90 days, or if you accidentally clicked "Sign Out" in Riot Client:
+1. When detected, the app automatically marks your account as **`⚠️ LOGGED OUT`**.
+2. Open Riot Client and sign into that account normally (with "Stay signed in" checked).
+3. In the Switcher app, click the highlighted **🔄 (Refresh)** button on that account's card. Your session is immediately re-linked!
+
+#### Can I click "Sign Out" inside Riot Client?
+⚠️ **Avoid clicking "Sign Out" in Riot Client.** Clicking "Sign Out" tells Riot's authentication servers to destroy that session token. Always switch accounts directly from this Switcher app or click **`🔑 LOG IN ANOTHER ACCOUNT`** instead!
 
 ---
 

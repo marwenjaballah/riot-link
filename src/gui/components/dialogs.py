@@ -552,7 +552,13 @@ class GuideModal(ctk.CTkToplevel):
             ),
             (
                 "4️⃣  Manage Your Accounts",
-                "Use the icon buttons on each card anytime:\n• ✏️ Edit: Change account nickname, tag, or avatar color\n• 🔄 Refresh: Renew session if Riot asks for login after months\n• 🗑️ Delete: Remove an account profile"
+                "Use the icon buttons on each card anytime:\n• ✏️ Edit: Change account nickname, tag, or avatar color\n• 🔄 Refresh: Renew / re-link session if needed\n• 🗑️ Delete: Remove an account profile"
+            ),
+            (
+                "5️⃣  ⚠️ Never Click 'Sign Out' in Riot Client",
+                "Clicking 'Sign Out' inside Riot Client tells Riot's servers to destroy your login token.\n\n"
+                "• To switch accounts: Always switch directly in this app!\n"
+                "• If an account is marked [LOGGED OUT]: Sign back in on Riot Client (check 'Stay signed in') and click the highlighted 🔄 (Refresh) button on its card to restore it!"
             ),
         ]
 
