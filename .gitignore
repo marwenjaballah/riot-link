@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment
+.env
+venv/
+env/
+ENV/
+
+# App Data / Profiles local cache
+*.log
+.DS_Store
+Thumbs.db
