@@ -36,6 +36,13 @@
 2. Download **`RiotLink.exe`** (or `RiotLink-v1.0.0-windows-x64.zip`).
 3. Run `RiotLink.exe`! No installation needed.
 
+> [!NOTE]
+> **Windows SmartScreen Prompt**: Because Riot Link is newly released and open-source, Windows SmartScreen may show *"Microsoft Defender SmartScreen prevented an unrecognized app from starting"*.
+> - Simply click **"More info"**
+> - Then click **"Run anyway"**
+>
+> Riot Link is 100% open-source, clean, and never touches your credentials. You can inspect the complete source code right here on GitHub.
+
 ### Option B: Run from Source
 ```powershell
 # Clone the repository
