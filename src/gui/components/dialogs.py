@@ -502,16 +502,16 @@ class SettingsModal(ctk.CTkToplevel):
 class GuideModal(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
-        self.title("How to Add & Switch Accounts")
-        self.geometry("540x580")
+        self.title("User Guide & FAQ — Everything You Should Know")
+        self.geometry("580x640")
         self.resizable(False, False)
         self.configure(fg_color=Theme.BG_DARK)
         self.transient(parent)
         self.grab_set()
 
         self.update_idletasks()
-        px = parent.winfo_x() + (parent.winfo_width() - 540) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 580) // 2
+        px = parent.winfo_x() + (parent.winfo_width() - 580) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 640) // 2
         self.geometry(f"+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
@@ -520,49 +520,94 @@ class GuideModal(ctk.CTkToplevel):
         header = ctk.CTkFrame(self, fg_color=Theme.SURFACE, corner_radius=0)
         header.pack(fill="x", padx=0, pady=0)
 
+        title_row = ctk.CTkFrame(header, fg_color="transparent")
+        title_row.pack(fill="x", padx=24, pady=(16, 4))
+
         ctk.CTkLabel(
-            header,
-            text="HOW TO ADD & SWITCH ACCOUNTS",
+            title_row,
+            text="HELP, GUIDE & FAQ",
             font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
             text_color=Theme.TEXT_PRIMARY
-        ).pack(anchor="w", padx=24, pady=(16, 4))
+        ).pack(side="left")
+
+        badge = ctk.CTkLabel(
+            title_row,
+            text=" ALL-IN-ONE ",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            fg_color="#064e3b",
+            text_color="#34d399",
+            corner_radius=4,
+            height=20
+        )
+        badge.pack(side="left", padx=(10, 0))
 
         ctk.CTkLabel(
             header,
-            text="Step-by-step guide to saving multiple accounts without passwords.",
+            text="Everything you should know about adding accounts, switching, and safety.",
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=Theme.TEXT_SECONDARY
         ).pack(anchor="w", padx=24, pady=(0, 16))
 
         content = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=20, pady=16)
+        content.pack(fill="both", expand=True, padx=20, pady=14)
 
-        steps = [
+        sections = [
             (
-                "1️⃣  Save Your First Account",
-                "Open your official Riot Client, type your username and password, make sure 'Stay signed in' is CHECKED, and log in. Once you see the home screen, open this app and click '+ SAVE CURRENT ACCOUNT'."
+                "🔑  How to Add Your First Account",
+                "1. Open the official Riot Client.\n"
+                "2. Type your username and password.\n"
+                "3. IMPORTANT: Make sure 'Stay signed in' is CHECKED!\n"
+                "4. Complete 2FA (if prompted) until you see the Riot Client home screen.\n"
+                "5. Open this app and click '+ SAVE CURRENT ACCOUNT' at the top!"
             ),
             (
-                "2️⃣  Adding Another Account (Important!)",
-                "Do NOT click 'Sign Out' in Riot Client! Instead, click '🔑 LOG IN ANOTHER ACCOUNT' in this app. It opens a clean login window without disconnecting your first account. Log into Account #2 (with 'Stay signed in' checked) and click '+ SAVE CURRENT ACCOUNT'."
+                "➕  How to Add More Accounts (Account #2, #3...)",
+                "⚠️ DO NOT click 'Sign Out' in Riot Client!\n\n"
+                "1. In this app, click '🔑 LOG IN ANOTHER ACCOUNT'.\n"
+                "2. This safely closes Riot Client and opens a clean login screen without disconnecting your first account.\n"
+                "3. Log into your next account (check 'Stay signed in').\n"
+                "4. Once on the home screen, click '+ SAVE CURRENT ACCOUNT'!"
             ),
             (
-                "3️⃣  1-Click Instant Switching",
-                "Whenever you want to switch, just click 'SWITCH & PLAY' on any saved card. You can also click the 'LoL' or 'VAL' buttons to jump straight into League of Legends or VALORANT!"
+                "⚡  1-Click Instant Switching & Direct Play",
+                "• Click 'SWITCH & PLAY' on any account card to switch instantly.\n"
+                "• Click the 'LoL' or 'VAL' buttons to jump straight into League of Legends or VALORANT on that account with 0 clicks!"
             ),
             (
-                "4️⃣  Manage Your Accounts",
-                "Use the icon buttons on each card anytime:\n• ✏️ Edit: Change account nickname, tag, or avatar color\n• 🔄 Refresh: Renew / re-link session if needed\n• 🗑️ Delete: Remove an account profile"
+                "⚠️  Why You Should NEVER Click 'Sign Out' in Riot Client",
+                "Clicking 'Sign Out' in Riot Client sends a request to Riot's auth servers to permanently revoke and destroy that session token.\n\n"
+                "• Always switch accounts directly from this Switcher app instead of logging out.\n"
+                "• If you want to log into an unsaved account, always use '🔑 LOG IN ANOTHER ACCOUNT'."
             ),
             (
-                "5️⃣  ⚠️ Never Click 'Sign Out' in Riot Client",
-                "Clicking 'Sign Out' inside Riot Client tells Riot's servers to destroy your login token.\n\n"
-                "• To switch accounts: Always switch directly in this app!\n"
-                "• If an account is marked [LOGGED OUT]: Sign back in on Riot Client (check 'Stay signed in') and click the highlighted 🔄 (Refresh) button on its card to restore it!"
+                "🔄  What to Do If an Account Shows [LOGGED OUT]",
+                "If Riot Client was signed out, the card displays ⚠️ LOGGED OUT with an amber border.\n\n"
+                "To fix it in 15 seconds:\n"
+                "1. Open Riot Client and sign into that account normally (check 'Stay signed in').\n"
+                "2. Return to this app and click the highlighted 🔄 (Refresh) button on that account's card.\n"
+                "3. Your session is instantly re-linked and ready for 1-click switching again!"
+            ),
+            (
+                "🛡️  Is It Safe from Riot Vanguard & Anti-Cheat?",
+                "100% SAFE — 0% BAN RISK.\n\n"
+                "• Cheats inject malicious code into running game memory. This app NEVER touches game memory, never alters game files, and never runs during your matches.\n"
+                "• It only swaps Riot's own official local session files when the client is closed, identical to logging in manually."
+            ),
+            (
+                "🔒  Security & 2FA (Two-Factor Authentication)",
+                "• No Passwords Stored: This app NEVER asks for or stores your Riot password.\n"
+                "• Local Storage Only: Session tokens are stored strictly on your local PC in %APPDATA%.\n"
+                "• 2FA Persistence: You only enter 2FA once when saving the account. Riot's servers remember your PC, so switching accounts skips 2FA prompts automatically!"
+            ),
+            (
+                "🛠️  Account Card Controls",
+                "• ✏️ Edit: Change account nickname, tag label, avatar color, or default game.\n"
+                "• 🔄 Refresh: Re-link or renew token when Riot asks for a login update.\n"
+                "• 🗑️ Delete: Remove account profile from this app (this will NOT delete your real Riot account)."
             ),
         ]
 
-        for step_title, step_desc in steps:
+        for step_title, step_desc in sections:
             card = ctk.CTkFrame(content, fg_color=Theme.SURFACE, corner_radius=8, border_width=1, border_color=Theme.CARD_BORDER)
             card.pack(fill="x", pady=6)
 
@@ -579,7 +624,7 @@ class GuideModal(ctk.CTkToplevel):
                 font=ctk.CTkFont(family="Segoe UI", size=11),
                 text_color=Theme.TEXT_SECONDARY,
                 justify="left",
-                wraplength=460
+                wraplength=500
             ).pack(anchor="w", padx=14, pady=(0, 10))
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -587,7 +632,7 @@ class GuideModal(ctk.CTkToplevel):
 
         got_it_btn = ctk.CTkButton(
             btn_frame,
-            text="Got It, Let's Play!",
+            text="Got It, Close Guide",
             fg_color=Theme.ACCENT_CYAN,
             hover_color=Theme.ACCENT_CYAN_HOVER,
             text_color="#000000",

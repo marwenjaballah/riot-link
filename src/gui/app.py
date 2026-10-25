@@ -110,15 +110,16 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         self.guide_btn = ctk.CTkButton(
             top_right_controls,
-            text="📖 How to Add Accounts",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text="?",
+            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
             fg_color=Theme.CARD_BG,
             hover_color=Theme.SURFACE_HOVER,
             text_color=Theme.ACCENT_CYAN,
             border_width=1,
             border_color=Theme.CARD_BORDER,
+            width=32,
             height=32,
-            corner_radius=6,
+            corner_radius=16,
             command=self._open_guide_modal
         )
         self.guide_btn.pack(side="left", padx=(0, 8))
