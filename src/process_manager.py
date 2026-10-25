@@ -141,27 +141,42 @@ class ProcessManager:
     def launch(cls, executable_path: Path, product: str = "riot_client") -> bool:
         """
         Launch Riot Client or a specific game (League of Legends, Valorant, TFT).
-        Runs detached and without any console window.
+        Uses Windows ShellExecute (os.startfile) so it is launched by Windows Explorer
+        directly, completely independent of Riot Link (identical to double-clicking
+        an icon on your desktop).
         """
         if not executable_path.is_file():
             raise FileNotFoundError(f"RiotClientServices.exe not found at: {executable_path}")
 
         prod_cfg = Config.PRODUCTS.get(product, Config.PRODUCTS["riot_client"])
-        args = [str(executable_path)] + prod_cfg["args"]
+        args_list = prod_cfg.get("args", [])
+        args_str = " ".join(args_list)
 
-        # Launch detached and completely windowless from current process
-        DETACHED_PROCESS = 0x00000008
-        CREATE_NEW_PROCESS_GROUP = 0x00000200
-        CREATE_NO_WINDOW = 0x08000000
-        flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+        import os
+        try:
+            # os.startfile triggers Win32 ShellExecuteW via Windows Explorer.
+            # To Windows, this is identical to a user double-clicking a desktop shortcut.
+            os.startfile(
+                str(executable_path),
+                operation="open",
+                arguments=args_str,
+                cwd=str(executable_path.parent)
+            )
+            return True
+        except Exception:
+            # Fallback to detached subprocess only if Windows ShellExecute fails
+            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            CREATE_NO_WINDOW = 0x08000000
+            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
 
-        subprocess.Popen(
-            args,
-            cwd=str(executable_path.parent),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=flags,
-            close_fds=True
-        )
-        return True
+            subprocess.Popen(
+                [str(executable_path)] + args_list,
+                cwd=str(executable_path.parent),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=flags,
+                close_fds=True
+            )
+            return True
