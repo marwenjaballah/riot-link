@@ -499,6 +499,186 @@ class SettingsModal(ctk.CTkToplevel):
         self.on_save(self.settings)
 
 
+class RiotClientSetupModal(ctk.CTkToplevel):
+    """
+    First-run setup modal shown when Riot Client is not found automatically
+    in the default installation paths.
+    """
+    def __init__(self, parent, on_saved: Callable[[str], None]):
+        super().__init__(parent)
+        self.on_saved = on_saved
+        self.title("Riot Client Setup Required")
+        self.geometry("540x480")
+        self.resizable(False, False)
+        self.configure(fg_color=Theme.BG_DARK)
+        self.transient(parent)
+        self.grab_set()
+
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width() - 540) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 480) // 2
+        self.geometry(f"+{max(0, px)}+{max(0, py)}")
+
+        self._build_ui()
+
+    def _build_ui(self):
+        # Header banner
+        header = ctk.CTkFrame(self, fg_color=Theme.SURFACE, corner_radius=0)
+        header.pack(fill="x", padx=0, pady=0)
+
+        ctk.CTkLabel(
+            header,
+            text="RIOT CLIENT NOT DETECTED",
+            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            text_color=Theme.WARNING
+        ).pack(anchor="w", padx=24, pady=(16, 4))
+
+        ctk.CTkLabel(
+            header,
+            text="Riot Link needs to know where RiotClientServices.exe is located on your PC.",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w", padx=24, pady=(0, 16))
+
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=24, pady=(16, 12))
+
+        # Help / Instructions Card
+        help_card = ctk.CTkFrame(content, fg_color=Theme.SURFACE, corner_radius=8, border_width=1, border_color=Theme.CARD_BORDER)
+        help_card.pack(fill="x", pady=(0, 16))
+
+        ctk.CTkLabel(
+            help_card,
+            text="💡 Quick Guide to Locate Your Riot Client",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=Theme.ACCENT_CYAN
+        ).pack(anchor="w", padx=14, pady=(10, 4))
+
+        help_text = (
+            "1. Common Default Folders:\n"
+            "   • C:\\Riot Games\\Riot Client\\RiotClientServices.exe\n"
+            "   • D:\\Riot Games\\Riot Client\\RiotClientServices.exe\n\n"
+            "2. Shortcut Trick:\n"
+            "   Right-click your Riot Client desktop or start menu icon, "
+            "select 'Open file location', and select RiotClientServices.exe."
+        )
+        ctk.CTkLabel(
+            help_card,
+            text=help_text,
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=Theme.TEXT_SECONDARY,
+            justify="left"
+        ).pack(anchor="w", padx=14, pady=(0, 12))
+
+        # Path input
+        ctk.CTkLabel(
+            content,
+            text="LOCATE RIOTCLIENTSERVICES.EXE",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=Theme.TEXT_PRIMARY
+        ).pack(anchor="w", pady=(0, 4))
+
+        path_row = ctk.CTkFrame(content, fg_color="transparent")
+        path_row.pack(fill="x", pady=(0, 8))
+
+        self.path_entry = ctk.CTkEntry(
+            path_row,
+            height=36,
+            placeholder_text="Click Browse to select RiotClientServices.exe...",
+            fg_color=Theme.SURFACE,
+            border_color=Theme.CARD_BORDER,
+            text_color=Theme.TEXT_PRIMARY
+        )
+        self.path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        browse_btn = ctk.CTkButton(
+            path_row,
+            text="Browse...",
+            width=84,
+            height=36,
+            fg_color=Theme.SURFACE,
+            hover_color=Theme.SURFACE_HOVER,
+            border_width=1,
+            border_color=Theme.CARD_BORDER,
+            command=self._browse_path
+        )
+        browse_btn.pack(side="right")
+
+        # Bottom buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=24, pady=(0, 18))
+
+        skip_btn = ctk.CTkButton(
+            btn_frame,
+            text="I'll Set It Later",
+            fg_color=Theme.SURFACE,
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.TEXT_SECONDARY,
+            height=40,
+            command=self.destroy
+        )
+        skip_btn.pack(side="left", expand=True, fill="x", padx=(0, 8))
+
+        save_btn = ctk.CTkButton(
+            btn_frame,
+            text="Save Riot Client Path",
+            fg_color=Theme.ACCENT_CYAN,
+            hover_color=Theme.ACCENT_CYAN_HOVER,
+            text_color="#000000",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            height=40,
+            command=self._handle_save
+        )
+        save_btn.pack(side="right", expand=True, fill="x", padx=(8, 0))
+
+    def _browse_path(self):
+        file_path = filedialog.askopenfilename(
+            parent=self,
+            title="Locate RiotClientServices.exe",
+            filetypes=[
+                ("Riot Client Services", "RiotClientServices.exe"),
+                ("Executable Files", "*.exe"),
+                ("All Files", "*.*")
+            ]
+        )
+        if file_path:
+            self.path_entry.delete(0, "end")
+            self.path_entry.insert(0, file_path)
+
+    def _handle_save(self):
+        val = self.path_entry.get().strip()
+        if not val:
+            messagebox.showwarning(
+                "Path Required",
+                "Please click Browse to select your RiotClientServices.exe location.",
+                parent=self
+            )
+            return
+
+        from pathlib import Path
+        path_obj = Path(val)
+        if not path_obj.is_file():
+            messagebox.showerror(
+                "File Not Found",
+                f"The selected file does not exist:\n{val}",
+                parent=self
+            )
+            return
+
+        if path_obj.name.lower() != "riotclientservices.exe":
+            confirm = messagebox.askyesno(
+                "Different File Selected",
+                f"You selected '{path_obj.name}' instead of 'RiotClientServices.exe'.\n\n"
+                "Are you sure this is your main Riot Client executable?",
+                parent=self
+            )
+            if not confirm:
+                return
+
+        self.on_saved(str(path_obj))
+        self.destroy()
+
+
 class GuideModal(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)

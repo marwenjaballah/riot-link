@@ -9,7 +9,7 @@ import customtkinter as ctk
 from PIL import Image
 
 from .theme import Theme
-from .components.dialogs import AddAccountModal, EditAccountModal, SettingsModal, GuideModal
+from .components.dialogs import AddAccountModal, EditAccountModal, SettingsModal, GuideModal, RiotClientSetupModal
 from .components.account_card import AccountCard
 from ..session_manager import SessionManager
 from ..process_manager import ProcessManager
@@ -42,6 +42,9 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         self._build_layout()
         self._refresh_ui()
+
+        # Verify Riot Client path on first run / startup
+        self.after(350, self._check_initial_riot_path)
 
         # Periodic status check (every 3 seconds)
         self.after(3000, self._periodic_status_check)
@@ -477,6 +480,16 @@ class RiotAccountSwitcherApp(ctk.CTk):
             messagebox.showerror("Error", f"Failed to update account: {e}", parent=self)
 
     def _handle_switch(self, account_id: str, product: str):
+        path_str = self.session_mgr.settings.riot_client_path
+        if not path_str or not Path(path_str).is_file():
+            detected = Config.find_riot_client_path()
+            if detected and detected.is_file():
+                self.session_mgr.settings.riot_client_path = str(detected)
+                self.session_mgr.save_settings(self.session_mgr.settings)
+            else:
+                RiotClientSetupModal(self, on_saved=self._on_riot_path_configured)
+                return
+
         account = self.session_mgr.get_account(account_id)
         if account and account.needs_reauth:
             confirm = messagebox.askyesno(
@@ -571,12 +584,39 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 text_color=Theme.TEXT_MUTED
             )
 
+    def _check_initial_riot_path(self):
+        """
+        Verify that RiotClientServices.exe exists in settings or default location.
+        If not found, prompt the user with a setup dialog containing helpful instructions.
+        """
+        path_str = self.session_mgr.settings.riot_client_path
+        if not path_str or not Path(path_str).is_file():
+            detected = Config.find_riot_client_path()
+            if detected and detected.is_file():
+                self.session_mgr.settings.riot_client_path = str(detected)
+                self.session_mgr.save_settings(self.session_mgr.settings)
+                return
+
+            # Open friendly setup modal with guidance
+            RiotClientSetupModal(self, on_saved=self._on_riot_path_configured)
+
+    def _on_riot_path_configured(self, new_path: str):
+        self.session_mgr.settings.riot_client_path = new_path
+        self.session_mgr.save_settings(self.session_mgr.settings)
+        self._refresh_ui()
+
     def _handle_direct_launch(self, product: str):
-        path_str = self.session_mgr.settings.riot_client_path or Config.find_riot_client_path()
-        if not path_str:
-            messagebox.showwarning("Riot Path Missing", "Please set Riot Client path in Settings.", parent=self)
-            return
-        from pathlib import Path
+        path_str = self.session_mgr.settings.riot_client_path
+        if not path_str or not Path(path_str).is_file():
+            detected = Config.find_riot_client_path()
+            if detected and detected.is_file():
+                path_str = str(detected)
+                self.session_mgr.settings.riot_client_path = path_str
+                self.session_mgr.save_settings(self.session_mgr.settings)
+            else:
+                RiotClientSetupModal(self, on_saved=self._on_riot_path_configured)
+                return
+
         ProcessManager.launch(Path(path_str), product=product)
         self._refresh_ui()
 
