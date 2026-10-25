@@ -14,3 +14,7 @@ ENV/
 *.log
 .DS_Store
 Thumbs.db
+
+# Build Artifacts
+build/
+dist/
