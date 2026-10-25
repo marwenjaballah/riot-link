@@ -117,18 +117,19 @@ class Config:
         2. Check Windows Registry
         3. Check common drive paths (D:, C:, E:, etc.)
         """
-        # 1. Check running process
-        # Only the process name is read for every process (no handles opened);
-        # the executable path is queried solely for RiotClientServices.exe.
-        for proc in psutil.process_iter(["name"]):
+        # 1. Check Riot's official lockfile PID if Riot Client is already open
+        lockfile = cls.RIOT_CLIENT_CONFIG_DIR / "lockfile"
+        if lockfile.is_file():
             try:
-                name = proc.info.get("name") or ""
-                if name.lower() == "riotclientservices.exe":
+                content = lockfile.read_text(encoding="utf-8", errors="ignore").strip()
+                parts = content.split(":")
+                if len(parts) >= 2 and parts[1].isdigit():
+                    proc = psutil.Process(int(parts[1]))
                     exe = proc.exe()
                     if exe and Path(exe).is_file():
                         return Path(exe)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
+            except Exception:
+                pass
 
         # 2. Check Windows Registry
         reg_paths = [

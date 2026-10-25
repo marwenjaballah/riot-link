@@ -1,119 +1,133 @@
 """
 Process Manager for detecting, gracefully closing, and launching Riot Client processes.
+Uses Riot's official lockfile and native Windows system tools (zero process memory scanning).
 """
 
 import subprocess
 import time
 from pathlib import Path
+from typing import Optional, List
 import psutil
 from .config import Config
 
 
 class ProcessManager:
     @staticmethod
-    def get_running_riot_processes() -> list[psutil.Process]:
-        """Return list of currently active Riot-related processes."""
-        active = []
-        target_names = {name.lower() for name in Config.RIOT_PROCESS_NAMES}
-        for proc in psutil.process_iter(["pid", "name"]):
+    def get_riot_client_lockfile_pid() -> Optional[int]:
+        """
+        Read the active Riot Client PID directly from Riot's official lockfile.
+        The lockfile format is: '<ProcessName>:<PID>:<Port>:<Password>:<Protocol>'
+        Example: 'Riot Client:27836:60347:ayuKBM-eaptbv0gzNytVAA:https'
+        Returns None if lockfile does not exist or cannot be parsed.
+        """
+        lockfile = Config.RIOT_CLIENT_CONFIG_DIR / "lockfile"
+        if not lockfile.is_file():
+            return None
+        try:
+            with open(lockfile, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read().strip()
+                parts = content.split(":")
+                if len(parts) >= 2 and parts[1].isdigit():
+                    return int(parts[1])
+        except Exception:
+            pass
+        return None
+
+    @classmethod
+    def is_riot_running(cls) -> bool:
+        """
+        Passive check: returns True if Riot Client's official lockfile exists and is active.
+        Zero system process enumeration, zero handle queries to game processes.
+        """
+        lockfile = Config.RIOT_CLIENT_CONFIG_DIR / "lockfile"
+        if not lockfile.is_file():
+            return False
+
+        pid = cls.get_riot_client_lockfile_pid()
+        if pid:
             try:
-                name = proc.info.get("name") or ""
-                if name.lower() in target_names:
-                    active.append(proc)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-        return active
+                # Check only this single specific PID
+                if psutil.pid_exists(pid):
+                    return True
+                else:
+                    # Stale lockfile left from an unexpected crash; clean it up
+                    lockfile.unlink(missing_ok=True)
+                    return False
+            except Exception:
+                return True
+        return True
 
     @staticmethod
-    def is_riot_running() -> bool:
-        """Check if any Riot Client or game process is currently running."""
-        return len(ProcessManager.get_running_riot_processes()) > 0
-
-    @staticmethod
-    def get_running_games() -> list[str]:
+    def get_running_games() -> List[str]:
         """
-        Return display names of Riot games currently running (e.g. ["VALORANT"]).
-        If non-empty, a match may be in progress and closing it could cause
-        leaver penalties, so callers should ask the user before closing anything.
+        Check if any Riot game match (League of Legends, VALORANT) is currently running.
+        Uses native Windows tasklist filter (zero process handles opened from Python).
         """
-        game_map = {k.lower(): v for k, v in Config.GAME_PROCESS_NAMES.items()}
         found = []
-        for proc in psutil.process_iter(["name"]):
-            try:
-                name = (proc.info.get("name") or "").lower()
-                label = game_map.get(name)
-                if label and label not in found:
-                    found.append(label)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+        CREATE_NO_WINDOW = 0x08000000
+
+        for exe_name, display_name in Config.GAME_PROCESS_NAMES.items():
+            if display_name in found:
                 continue
+            try:
+                # Query native Windows tasklist directly for this specific image name
+                res = subprocess.run(
+                    ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/NH"],
+                    capture_output=True,
+                    text=True,
+                    creationflags=CREATE_NO_WINDOW,
+                    timeout=1.5,
+                    check=False
+                )
+                output = res.stdout or ""
+                # If running, tasklist outputs the image name and PID; if not, it outputs "INFO: No tasks..."
+                if exe_name.lower() in output.lower():
+                    found.append(display_name)
+            except Exception:
+                pass
+
         return found
 
     @classmethod
     def close_all_riot_processes(cls, timeout: float = 4.0) -> bool:
         """
-        Closes all running Riot processes cleanly using psutil (pure Win32, zero console popups):
-        1. Gracefully calls proc.terminate() so Riot Client flushes settings to disk.
-        2. Waits up to 1.8 seconds for a clean exit.
-        3. Forcefully kills (proc.kill()) any remaining stubborn processes.
-        4. Cleans up file locks.
+        Closes all running Riot processes using targeted Windows taskkill (by client name and PID).
+        Zero process scanning, zero memory hooks, 100% native Windows commands.
         """
-        procs = cls.get_running_riot_processes()
-        if not procs:
-            return True
+        CREATE_NO_WINDOW = 0x08000000
 
-        # Also collect child processes of each target process
-        all_procs = []
-        for p in procs:
-            all_procs.append(p)
+        # 1. If active lockfile has the PID, kill that exact process tree directly
+        lockfile_pid = cls.get_riot_client_lockfile_pid()
+        if lockfile_pid:
             try:
-                all_procs.extend(p.children(recursive=True))
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(lockfile_pid)],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=CREATE_NO_WINDOW,
+                    check=False
+                )
+            except Exception:
                 pass
 
-        # Deduplicate
-        seen_pids = set()
-        unique_procs = []
-        for p in all_procs:
-            if p.pid not in seen_pids:
-                seen_pids.add(p.pid)
-                unique_procs.append(p)
-
-        # 1. Gracefully terminate
-        for p in unique_procs:
+        # 2. Terminate Riot processes strictly by executable image name
+        for name in Config.RIOT_PROCESS_NAMES:
             try:
-                p.terminate()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/IM", name],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=CREATE_NO_WINDOW,
+                    check=False
+                )
+            except Exception:
                 pass
 
-        # 2. Wait up to 1.8 seconds for graceful exit
-        gone, alive = psutil.wait_procs(unique_procs, timeout=1.8)
+        time.sleep(0.4)
 
-        # 3. Force-kill any stubborn remaining processes
-        for p in alive:
-            try:
-                p.kill()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-
-        # Fallback to taskkill ONLY if something is still alive, strictly with CREATE_NO_WINDOW
-        if cls.is_riot_running():
-            CREATE_NO_WINDOW = 0x08000000
-            for name in Config.RIOT_PROCESS_NAMES:
-                try:
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/IM", name],
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        creationflags=CREATE_NO_WINDOW,
-                        check=False
-                    )
-                except Exception:
-                    pass
-
-        time.sleep(0.3)
-
-        # 4. Remove stale lockfile if it remains
+        # 3. Clean up lockfile if it remains
         lockfile = Config.RIOT_CLIENT_CONFIG_DIR / "lockfile"
         if lockfile.exists():
             try:
