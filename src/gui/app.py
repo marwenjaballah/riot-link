@@ -22,7 +22,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
         super().__init__()
 
         # Window Setup
-        self.title("Riot Account Switcher & Launcher")
+        self.title(f"{Config.APP_NAME} v{Config.APP_VERSION}")
         self.geometry("820x680")
         self.minsize(580, 520)
         self.configure(fg_color=Theme.BG_DARK)
@@ -48,8 +48,8 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
     def _load_window_icon(self):
         """Set window icon from assets if available."""
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        ico_path = base_dir / "assets" / "icon.ico"
+        assets_dir = Config.get_assets_dir()
+        ico_path = assets_dir / "icon.ico"
 
         if ico_path.is_file():
             try:
@@ -58,7 +58,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 pass
 
         self.logo_image = None
-        logo_png = base_dir / "assets" / "logo_48.png"
+        logo_png = assets_dir / "logo_48.png"
         if logo_png.is_file():
             try:
                 pil_img = Image.open(logo_png)
@@ -90,15 +90,15 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         app_title = ctk.CTkLabel(
             title_col,
-            text="RIOT ACCOUNT SWITCHER",
-            font=ctk.CTkFont(family="Segoe UI", size=17, weight="bold"),
+            text=Config.APP_NAME.upper(),
+            font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"),
             text_color=Theme.TEXT_PRIMARY
         )
         app_title.pack(anchor="w")
 
         app_subtitle = ctk.CTkLabel(
             title_col,
-            text="Instant 1-Click Login • 2FA Persistent • 100% Anti-Cheat Safe",
+            text=Config.APP_TAGLINE,
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=Theme.TEXT_MUTED
         )
@@ -285,7 +285,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         version_lbl = ctk.CTkLabel(
             version_frame,
-            text="v1.2.0 • Ready",
+            text=f"v{Config.APP_VERSION} • Stable",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             text_color=Theme.TEXT_MUTED
         )

@@ -1,16 +1,23 @@
 """
-Configuration & Path Management for Riot Account Switcher.
+Configuration & Path Management for Riot Link.
 """
 
 from pathlib import Path
 import os
+import sys
+import shutil
 import winreg
 import psutil
 
 
 class Config:
-    # Application data directory (in %APPDATA%/RiotAccountSwitcher)
-    APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "RiotAccountSwitcher"
+    APP_NAME = "Riot Link"
+    APP_VERSION = "1.0.0"
+    APP_TAGLINE = "1-Click Account Switcher • 2FA Persistent • 100% Anti-Cheat Safe"
+
+    # Application data directory (in %APPDATA%/RiotLink with auto-migration from legacy folder)
+    _LEGACY_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "RiotAccountSwitcher"
+    APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "RiotLink"
     PROFILES_DIR = APP_DATA_DIR / "profiles"
     SETTINGS_FILE = APP_DATA_DIR / "settings.json"
 
@@ -76,8 +83,20 @@ class Config:
     }
 
     @classmethod
+    def get_assets_dir(cls) -> Path:
+        """Locate assets directory across local source and PyInstaller frozen builds."""
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            return Path(sys._MEIPASS) / "assets"
+        return Path(__file__).resolve().parent.parent / "assets"
+
+    @classmethod
     def ensure_directories(cls):
-        """Ensure application directories exist."""
+        """Ensure application directories exist and auto-migrate legacy data if present."""
+        if cls._LEGACY_DIR.exists() and not cls.APP_DATA_DIR.exists():
+            try:
+                shutil.copytree(cls._LEGACY_DIR, cls.APP_DATA_DIR)
+            except Exception:
+                pass
         cls.APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
         cls.PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 

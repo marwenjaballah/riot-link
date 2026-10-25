@@ -1,5 +1,5 @@
 """
-Riot Account Switcher & Auto-Launcher
+Riot Link — 1-Click Riot Account Switcher & Launcher
 Entry point.
 """
 

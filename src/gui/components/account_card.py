@@ -22,8 +22,7 @@ _trash_icon = None
 def get_action_icons():
     global _edit_icon, _refresh_icon, _trash_icon
     if _edit_icon is None:
-        base_dir = Path(__file__).resolve().parent.parent.parent.parent
-        assets_dir = base_dir / "assets"
+        assets_dir = Config.get_assets_dir()
         img_e = Image.open(assets_dir / "icon_edit.png")
         img_r = Image.open(assets_dir / "icon_refresh.png")
         img_t = Image.open(assets_dir / "icon_trash.png")
