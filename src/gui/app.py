@@ -271,7 +271,33 @@ class RiotAccountSwitcherApp(ctk.CTk):
     def _refresh_ui(self):
         """Re-render account cards and update status badges."""
         self.active_account_id = self.session_mgr.get_active_account_id()
+        has_session = self.session_mgr.has_active_riot_session()
+        self._last_has_session = has_session
         is_running = ProcessManager.is_riot_running()
+
+        # Update Save Button: Only active when an unsaved account is currently logged in!
+        if not has_session:
+            self.add_btn.configure(
+                state="disabled",
+                text="+ SAVE CURRENT ACCOUNT",
+                fg_color=Theme.CARD_BG,
+                text_color=Theme.TEXT_MUTED
+            )
+        elif self.active_account_id is not None:
+            self.add_btn.configure(
+                state="disabled",
+                text="✓ CURRENT ACCOUNT SAVED",
+                fg_color=Theme.CARD_BG,
+                text_color=Theme.TEXT_MUTED
+            )
+        else:
+            self.add_btn.configure(
+                state="normal",
+                text="+ SAVE CURRENT ACCOUNT",
+                fg_color=Theme.ACCENT_RED,
+                hover_color=Theme.ACCENT_RED_HOVER,
+                text_color="#ffffff"
+            )
 
         # Update Status Pill
         if is_running:
@@ -390,6 +416,19 @@ class RiotAccountSwitcherApp(ctk.CTk):
             )
             return
 
+        active_id = self.session_mgr.get_active_account_id()
+        if active_id is not None:
+            accounts = self.session_mgr.get_accounts()
+            active_acc = next((a for a in accounts if a.id == active_id), None)
+            acc_name = active_acc.name if active_acc else "Current account"
+            messagebox.showinfo(
+                "Account Already Saved",
+                f"The active account ({acc_name}) is already saved in your account list!\n\n"
+                "If you want to add another account, click '🔑 LOG IN ANOTHER ACCOUNT'.",
+                parent=self
+            )
+            return
+
         AddAccountModal(self, on_save=self._save_new_account)
 
     def _save_new_account(self, name: str, tag: str, color: str, preferred_game: str):
@@ -494,10 +533,13 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self._refresh_ui()
 
     def _periodic_status_check(self):
-        """Check status periodically to keep the status indicator responsive."""
+        """Check status periodically to keep the status indicator and save button responsive."""
         is_running = ProcessManager.is_riot_running()
         active_id = self.session_mgr.get_active_account_id()
-        if active_id != self.active_account_id:
+        has_session = self.session_mgr.has_active_riot_session()
+        last_has_session = getattr(self, "_last_has_session", None)
+
+        if active_id != self.active_account_id or has_session != last_has_session:
             self._refresh_ui()
         else:
             if is_running:
