@@ -226,28 +226,6 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self.search_entry.pack(side="right")
         self.search_entry.bind("<KeyRelease>", self._on_search_changed)
 
-        # Notice container permanently placed between sub_bar and scroll_frame
-        self.notice_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.notice_container.pack(fill="x", padx=18, pady=0)
-
-        # Notice banner for logged out / reauth accounts (inside notice_container)
-        self.notice_banner = ctk.CTkFrame(
-            self.notice_container,
-            fg_color="#451a03",
-            corner_radius=8,
-            border_width=1,
-            border_color="#b45309"
-        )
-        self.notice_label = ctk.CTkLabel(
-            self.notice_banner,
-            text="",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            text_color="#fbbf24",
-            wraplength=700,
-            justify="left"
-        )
-        self.notice_label.pack(side="left", padx=14, pady=8)
-
         # 3. Main Content: Scrollable Accounts List
         self.scroll_frame = ctk.CTkScrollableFrame(
             self,
@@ -345,32 +323,40 @@ class RiotAccountSwitcherApp(ctk.CTk):
         else:
             self.active_acc_lbl.configure(text="")
 
-        # Notice Banner for accounts requiring re-auth
-        reauth_accounts = [a for a in accounts if a.needs_reauth]
-        if reauth_accounts:
-            names = ", ".join(f"'{a.name}'" for a in reauth_accounts)
-            self.notice_label.configure(
-                text=f"⚠️ {names} was logged out in Riot Client. Sign in to Riot Client (check 'Stay signed in') and click 🔄 on the card to re-link."
-            )
-            if not self.notice_banner.winfo_ismapped():
-                self.notice_banner.pack(fill="x", pady=(0, 10))
-        else:
-            if self.notice_banner.winfo_ismapped():
-                self.notice_banner.pack_forget()
-
         # Update Footer Path (Display compact path to prevent collision)
         detected_path = self.session_mgr.settings.riot_client_path or Config.find_riot_client_path()
         if detected_path:
             p = Path(detected_path)
-            # Show compact drive:\...\RiotClientServices.exe
             compact_p = f"{p.drive}\\...\\{p.name}"
             self.footer_path_lbl.configure(text=f"Riot: {compact_p}")
         else:
             self.footer_path_lbl.configure(text="Riot Path: Not Found (Click ⚙)")
 
-        # Clear existing cards
+        # Clear existing cards and banners
         for widget in self.scroll_frame.winfo_children():
             widget.destroy()
+
+        # If any accounts require re-auth, show alert banner at the top of the list
+        reauth_accounts = [a for a in accounts if a.needs_reauth]
+        if reauth_accounts:
+            names = ", ".join(f"'{a.name}'" for a in reauth_accounts)
+            banner = ctk.CTkFrame(
+                self.scroll_frame,
+                fg_color="#451a03",
+                corner_radius=8,
+                border_width=1,
+                border_color="#b45309"
+            )
+            banner.pack(fill="x", pady=(0, 8))
+
+            ctk.CTkLabel(
+                banner,
+                text=f"⚠️ {names} was logged out in Riot Client. Sign in to Riot Client (check 'Stay signed in') and click 🔄 on the card to re-link.",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                text_color="#fbbf24",
+                wraplength=700,
+                justify="left"
+            ).pack(side="left", padx=14, pady=10)
 
         # Filter by search
         query = self.search_query.lower()
