@@ -151,6 +151,9 @@ del "%~f0"
 
             subprocess.Popen(
                 ["cmd.exe", "/c", str(updater_bat)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 creationflags=flags,
                 close_fds=True
             )

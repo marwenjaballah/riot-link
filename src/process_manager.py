@@ -116,6 +116,9 @@ class ProcessManager:
         subprocess.Popen(
             args,
             cwd=str(executable_path.parent),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             creationflags=flags,
             close_fds=True
         )
