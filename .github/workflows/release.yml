@@ -59,10 +59,10 @@ jobs:
           $zipHash = (Get-FileHash -Path "dist/$zipName" -Algorithm SHA256).Hash
 
           $checksumContent = @"
-          SHA256 Checksums for Riot Link $tag:
-          $exeHash  RiotLink.exe
-          $zipHash  $zipName
-          "@
+SHA256 Checksums for Riot Link ${tag}:
+$exeHash  RiotLink.exe
+$zipHash  $zipName
+"@
 
           Set-Content -Path "dist/checksums.txt" -Value $checksumContent
           Write-Output $checksumContent
