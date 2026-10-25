@@ -58,14 +58,13 @@ jobs:
           $exeHash = (Get-FileHash -Path "dist/RiotLink.exe" -Algorithm SHA256).Hash
           $zipHash = (Get-FileHash -Path "dist/$zipName" -Algorithm SHA256).Hash
 
-          $checksumContent = @"
-SHA256 Checksums for Riot Link ${tag}:
-$exeHash  RiotLink.exe
-$zipHash  $zipName
-"@
-
-          Set-Content -Path "dist/checksums.txt" -Value $checksumContent
-          Write-Output $checksumContent
+          $lines = @(
+              "SHA256 Checksums for Riot Link (${tag}):",
+              "$exeHash  RiotLink.exe",
+              "$zipHash  $zipName"
+          )
+          $lines | Set-Content -Path "dist/checksums.txt"
+          $lines | Write-Output
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
