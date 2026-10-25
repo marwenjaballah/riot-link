@@ -29,6 +29,25 @@ class ProcessManager:
         """Check if any Riot Client or game process is currently running."""
         return len(ProcessManager.get_running_riot_processes()) > 0
 
+    @staticmethod
+    def get_running_games() -> list[str]:
+        """
+        Return display names of Riot games currently running (e.g. ["VALORANT"]).
+        If non-empty, a match may be in progress and closing it could cause
+        leaver penalties, so callers should ask the user before closing anything.
+        """
+        game_map = {k.lower(): v for k, v in Config.GAME_PROCESS_NAMES.items()}
+        found = []
+        for proc in psutil.process_iter(["name"]):
+            try:
+                name = (proc.info.get("name") or "").lower()
+                label = game_map.get(name)
+                if label and label not in found:
+                    found.append(label)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        return found
+
     @classmethod
     def close_all_riot_processes(cls, timeout: float = 4.0) -> bool:
         """

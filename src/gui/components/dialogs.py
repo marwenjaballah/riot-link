@@ -771,15 +771,15 @@ class GuideModal(ctk.CTkToplevel):
                 "3. Your session is instantly re-linked and ready for 1-click switching again!"
             ),
             (
-                "🛡️  Is It Safe from Riot Vanguard & Anti-Cheat?",
-                "100% SAFE — 0% BAN RISK.\n\n"
-                "• Cheats inject malicious code into running game memory. This app NEVER touches game memory, never alters game files, and never runs during your matches.\n"
-                "• It only swaps Riot's own official local session files when the client is closed, identical to logging in manually."
+                "🛡️  Does It Touch the Game or Riot Vanguard?",
+                "No. This app never reads or writes game memory, never injects code, never modifies game files, and never interacts with Vanguard.\n\n"
+                "• It only swaps Riot's own local session files while the client is closed, then starts the official Riot Client.\n"
+                "• Riot Link is not endorsed by Riot Games. Riot can change its rules at any time, so use it at your own risk."
             ),
             (
                 "🔒  Security & 2FA (Two-Factor Authentication)",
                 "• No Passwords Stored: This app NEVER asks for or stores your Riot password.\n"
-                "• Local Storage Only: Session tokens are stored strictly on your local PC in %APPDATA%.\n"
+                "• Local Storage Only: Session tokens are stored only on your PC in %APPDATA%. Treat that folder like a password — don't share it.\n"
                 "• 2FA Persistence: You only enter 2FA once when saving the account. Riot's servers remember your PC, so switching accounts skips 2FA prompts automatically!"
             ),
             (
@@ -1015,10 +1015,16 @@ class UpdateModal(ctk.CTkToplevel):
                 text = f"Downloading: {mb_curr:.1f} MB / {mb_tot:.1f} MB ({pct}%)"
                 self.after(0, lambda: self._update_ui_progress(fraction, text))
 
-            UpdateManager.download_and_apply_update(download_url, progress_callback=on_progress)
+            UpdateManager.download_and_apply_update(
+                download_url,
+                progress_callback=on_progress,
+                checksums_url=self.release_info.get("checksums_url"),
+                asset_name=self.release_info.get("asset_name"),
+            )
             self.after(0, self._on_download_complete)
         except Exception as e:
-            self.after(0, lambda: self._on_download_error(str(e)))
+            err_msg = str(e)
+            self.after(0, lambda: self._on_download_error(err_msg))
 
     def _update_ui_progress(self, frac: float, text: str):
         self.progress_bar.set(frac)

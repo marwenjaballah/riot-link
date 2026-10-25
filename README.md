@@ -4,7 +4,7 @@
 
 ![Version](https://img.shields.io/badge/version-0.1.1-blue.svg?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6.svg?style=for-the-badge)
-![Safety](https://img.shields.io/badge/Vanguard%20Safe-100%25-brightgreen.svg?style=for-the-badge)
+![Game Memory](https://img.shields.io/badge/game%20memory-never%20touched-brightgreen.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-purple.svg?style=for-the-badge)
 
 **The 1-click Riot Games account switcher for League of Legends, VALORANT, and TFT.**  
@@ -17,12 +17,13 @@
 ## ✨ Features
 
 * **⚡ 1-Click Instant Switching**: Click `SWITCH & PLAY` on any account and your game starts up already logged in.
-* **🛡️ 100% Safe (0% Ban Risk)**: Works without hacking, injecting, or touching game memory. Riot Vanguard treats it completely normally.
+* **🛡️ No Injection or Memory Access**: Riot Link only copies Riot's own login files while the client is closed. It never touches the game process, game files, or Vanguard.
+* **⛔ Match Protection**: If a game is running, Riot Link asks before closing anything, so you don't accidentally leave a match.
 * **🔒 Zero Plaintext Passwords**: Your passwords are never asked for, transmitted, or stored.
 * **📲 2FA Persistent**: Authenticate Two-Factor Authentication once—Riot remembers your PC and bypasses 2FA on subsequent switches.
 * **🎯 Direct Game Shortcuts**: Dedicated `LoL` and `VAL` buttons to jump straight into League of Legends or VALORANT.
 * **🔄 Intelligent Logout Detection**: If an account gets signed out in Riot Client, Riot Link detects it, alerts you, and provides a 1-click re-linking flow.
-* **🔄 Seamless In-App Updates**: Automatically checks GitHub Releases and performs a 1-click in-place update and restart.
+* **🔄 Seamless In-App Updates**: Automatically checks GitHub Releases and performs a 1-click in-place update and restart. Every download is verified against the release's SHA256 checksum before installing.
 * **📥 Minimize to System Tray**: Keeps running quietly in your Windows notification tray on close (`X`), with a right-click menu to reopen, switch accounts, or exit.
 * **🎮 Profile Customization**: Organize accounts with tags (`Main`, `Smurf`, `Ranked`, `Casual`) and custom accent colors.
 * **💻 Standalone Executable**: Portable single `.exe` with zero installation required.
@@ -41,7 +42,7 @@
 > - Simply click **"More info"**
 > - Then click **"Run anyway"**
 >
-> Riot Link is 100% open-source, clean, and never touches your credentials. You can inspect the complete source code right here on GitHub.
+> Riot Link is open-source and never sees your password. Login tokens are stored only on your PC. You can inspect the complete source code right here on GitHub.
 
 ### Option B: Run from Source
 ```powershell
@@ -82,7 +83,9 @@ python main.py
 ## ❓ Frequently Asked Questions
 
 #### Will Riot Vanguard ban me for using this?
-**No, 100% safe.** Cheats inject code into game memory. Riot Link does not touch game memory, does not modify game files, and does not run during your matches. It only manages Riot's own official "Stay signed in" local configuration files while the client is closed.
+Riot Link doesn't do anything cheats do: no memory reading or writing, no code injection, no game file changes, and no interaction with Vanguard. It only swaps Riot's own "Stay signed in" files while the client is closed, then starts the official Riot Client.
+
+That said, Riot Link is **not endorsed by Riot Games**, and only Riot decides what is allowed. Riot can change its rules or detection at any time, so **use it at your own risk**.
 
 #### What happens if I have 2FA (Two-Factor Authentication)?
 You only enter your 2FA code **once** when saving the account with "Stay signed in" checked. Riot's servers remember that your computer is authorized, so switching accounts skips the 2FA prompt automatically!
@@ -131,3 +134,8 @@ Developed with ❤️ by **[Marwen Jaballah](https://github.com/marwenjaballah)*
 
 ## 📄 License
 Distributed under the MIT License.
+
+---
+
+## ⚖️ Disclaimer
+*Riot Link is not endorsed by or affiliated with Riot Games. Riot Games, VALORANT, League of Legends, and Teamfight Tactics are trademarks or registered trademarks of Riot Games, Inc. Use at your own risk.*

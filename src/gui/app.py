@@ -542,6 +542,9 @@ class RiotAccountSwitcherApp(ctk.CTk):
             if not confirm:
                 return
 
+        if not self._confirm_close_running_game("switch accounts"):
+            return
+
         try:
             self.session_mgr.switch_to_account(account_id, launch_product=product, auto_launch=True)
             self._refresh_ui()
@@ -606,6 +609,8 @@ class RiotAccountSwitcherApp(ctk.CTk):
             parent=self
         )
         if confirm:
+            if not self._confirm_close_running_game("open a clean sign-in screen"):
+                return
             self._is_preparing_new_login = True
             try:
                 self.session_mgr.prepare_new_login()
@@ -614,7 +619,34 @@ class RiotAccountSwitcherApp(ctk.CTk):
             finally:
                 self._is_preparing_new_login = False
 
+    def _confirm_close_running_game(self, action: str) -> bool:
+        """
+        If a Riot game is running (a match may be in progress), ask the user before
+        closing it. Returns True if it's OK to proceed. Defaults to 'No' so an
+        accidental Enter press never kills a live match.
+        """
+        games = ProcessManager.get_running_games()
+        if not games:
+            return True
+
+        if self.state() == "withdrawn":
+            self._restore_window()
+
+        game_list = " and ".join(games)
+        return messagebox.askyesno(
+            "Game Is Running",
+            f"{game_list} is currently running — a match may be in progress.\n\n"
+            f"To {action}, Riot Link has to close the game. Leaving a match early "
+            "can result in leaver penalties, LP loss, or queue restrictions.\n\n"
+            "Close the game anyway?",
+            icon="warning",
+            default="no",
+            parent=self
+        )
+
     def _handle_close_riot(self):
+        if not self._confirm_close_running_game("close Riot Client"):
+            return
         closed = ProcessManager.close_all_riot_processes(timeout=4.0)
         self._refresh_ui()
         if closed:
@@ -684,7 +716,8 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 else:
                     self.after(0, self._on_up_to_date)
             except Exception as e:
-                self.after(0, lambda: messagebox.showerror("Update Error", f"Could not check for updates:\n{e}", parent=self))
+                err_msg = str(e)
+                self.after(0, lambda: messagebox.showerror("Update Error", f"Could not check for updates:\n{err_msg}", parent=self))
                 self.after(0, lambda: self.version_btn.configure(text=f"● v{Config.APP_VERSION}", text_color="#10b981"))
 
         threading.Thread(target=run_check, daemon=True).start()

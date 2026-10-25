@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import time
+import hashlib
 import subprocess
 import urllib.request
 import urllib.error
@@ -57,11 +58,13 @@ class UpdateManager:
             if remote_ver > current_ver:
                 # Find RiotLink.exe asset
                 download_url = None
+                asset_name = None
                 asset_size = 0
                 for asset in data.get("assets", []):
                     name = asset.get("name", "")
                     if name.lower() == "riotlink.exe":
                         download_url = asset.get("browser_download_url")
+                        asset_name = name
                         asset_size = asset.get("size", 0)
                         break
 
@@ -70,8 +73,16 @@ class UpdateManager:
                     for asset in data.get("assets", []):
                         if asset.get("name", "").lower().endswith(".exe"):
                             download_url = asset.get("browser_download_url")
+                            asset_name = asset.get("name")
                             asset_size = asset.get("size", 0)
                             break
+
+                # Locate the published SHA256 checksums file
+                checksums_url = None
+                for asset in data.get("assets", []):
+                    if asset.get("name", "").lower() == "checksums.txt":
+                        checksums_url = asset.get("browser_download_url")
+                        break
 
                 return {
                     "tag": tag_name,
@@ -79,6 +90,8 @@ class UpdateManager:
                     "name": data.get("name") or tag_name,
                     "notes": data.get("body") or "New performance improvements and features.",
                     "download_url": download_url,
+                    "asset_name": asset_name,
+                    "checksums_url": checksums_url,
                     "html_url": data.get("html_url") or Config.GITHUB_RELEASES_URL,
                     "size": asset_size,
                 }
@@ -87,13 +100,44 @@ class UpdateManager:
         return None
 
     @staticmethod
+    def fetch_expected_sha256(checksums_url: str, asset_name: str, timeout: float = 15.0) -> str:
+        """
+        Download the release's checksums.txt and return the SHA256 for asset_name.
+        Expected line format: '<HEX_SHA256>  RiotLink.exe'
+        """
+        req = urllib.request.Request(
+            checksums_url,
+            headers={"User-Agent": f"RiotLink/{Config.APP_VERSION}"}
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            text = resp.read().decode("utf-8-sig", errors="ignore")
+
+        for line in text.splitlines():
+            parts = line.strip().split()
+            if len(parts) == 2 and parts[1].lower() == asset_name.lower():
+                digest = parts[0].lower()
+                if len(digest) == 64 and all(c in "0123456789abcdef" for c in digest):
+                    return digest
+        raise RuntimeError(f"No SHA256 entry for '{asset_name}' found in checksums.txt.")
+
+    @staticmethod
     def download_and_apply_update(
         download_url: str,
-        progress_callback: Optional[Callable[[float, int, int], None]] = None
+        progress_callback: Optional[Callable[[float, int, int], None]] = None,
+        checksums_url: Optional[str] = None,
+        asset_name: Optional[str] = None,
     ) -> bool:
         """
-        Download updated RiotLink.exe from GitHub and execute seamless in-place replacement.
+        Download updated RiotLink.exe from GitHub, verify its SHA256 against the
+        release's checksums.txt, and only then execute the in-place replacement.
         """
+        if not checksums_url:
+            raise RuntimeError(
+                "This release has no checksums.txt, so the download can't be verified. "
+                "Automatic update was cancelled for your safety."
+            )
+        asset_name = asset_name or "RiotLink.exe"
+
         # Determine the target executable path
         if getattr(sys, "frozen", False):
             target_exe = Path(sys.executable).resolve()
@@ -107,11 +151,14 @@ class UpdateManager:
         updater_bat = target_exe.parent / "_apply_update.bat"
 
         try:
+            expected_sha256 = UpdateManager.fetch_expected_sha256(checksums_url, asset_name)
+
             req = urllib.request.Request(
                 download_url,
                 headers={"User-Agent": f"RiotLink/{Config.APP_VERSION}"}
             )
 
+            hasher = hashlib.sha256()
             with urllib.request.urlopen(req, timeout=30.0) as resp:
                 total_size = int(resp.headers.get("Content-Length", 0))
                 downloaded = 0
@@ -123,10 +170,19 @@ class UpdateManager:
                         if not chunk:
                             break
                         f.write(chunk)
+                        hasher.update(chunk)
                         downloaded += len(chunk)
                         if progress_callback and total_size > 0:
                             fraction = min(1.0, downloaded / total_size)
                             progress_callback(fraction, downloaded, total_size)
+
+            actual_sha256 = hasher.hexdigest().lower()
+            if actual_sha256 != expected_sha256:
+                raise RuntimeError(
+                    "Checksum mismatch — the downloaded file does not match the published SHA256.\n"
+                    f"Expected: {expected_sha256}\nGot:      {actual_sha256}\n"
+                    "The update was NOT installed."
+                )
 
             # Generate updater batch script that waits for process to close, swaps .exe, and restarts
             bat_script = f"""@echo off

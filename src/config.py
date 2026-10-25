@@ -13,7 +13,7 @@ import psutil
 class Config:
     APP_NAME = "Riot Link"
     APP_VERSION = "0.1.1"
-    APP_TAGLINE = "1-Click Account Switcher • 2FA Persistent • 100% Anti-Cheat Safe"
+    APP_TAGLINE = "1-Click Account Switcher • 2FA Persistent • No Game Memory Access"
 
     # Branding & Repository
     AUTHOR_NAME = "Marwen Jaballah"
@@ -60,9 +60,17 @@ class Config:
         "LeagueClient.exe",
         "LeagueClientUx.exe",
         "LeagueClientUxRender.exe",
+        "League of Legends.exe",
         "VALORANT.exe",
         "VALORANT-Win64-Shipping.exe",
     ]
+
+    # Actual game processes (a match/game may be in progress if any of these run)
+    GAME_PROCESS_NAMES = {
+        "League of Legends.exe": "League of Legends",
+        "VALORANT-Win64-Shipping.exe": "VALORANT",
+        "VALORANT.exe": "VALORANT",
+    }
 
     # Product launch parameters
     PRODUCTS = {
@@ -110,11 +118,13 @@ class Config:
         3. Check common drive paths (D:, C:, E:, etc.)
         """
         # 1. Check running process
-        for proc in psutil.process_iter(["name", "exe"]):
+        # Only the process name is read for every process (no handles opened);
+        # the executable path is queried solely for RiotClientServices.exe.
+        for proc in psutil.process_iter(["name"]):
             try:
                 name = proc.info.get("name") or ""
                 if name.lower() == "riotclientservices.exe":
-                    exe = proc.info.get("exe")
+                    exe = proc.exe()
                     if exe and Path(exe).is_file():
                         return Path(exe)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
