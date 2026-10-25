@@ -23,6 +23,7 @@ from .components.account_card import AccountCard
 from ..session_manager import SessionManager
 from ..process_manager import ProcessManager
 from ..updater import UpdateManager
+from ..tray import TrayIconManager
 from ..config import Config
 from ..models import AccountProfile, AppSettings
 
@@ -45,6 +46,19 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         # Initialize Managers
         self.session_mgr = SessionManager()
+
+        # System Tray Manager (runs detached in background)
+        self.tray_mgr = TrayIconManager(
+            on_show=self._show_window_from_tray,
+            on_exit=self._exit_app_from_tray,
+            on_check_updates=self._handle_manual_check_updates,
+            get_accounts=self.session_mgr.get_accounts,
+            on_switch_account=self._switch_from_tray,
+        )
+        self.tray_mgr.start()
+
+        # Minimize to System Tray when close button ('X') is clicked
+        self.protocol("WM_DELETE_WINDOW", self._on_close_to_tray)
 
         # State
         self.search_query = ""
@@ -409,6 +423,9 @@ class RiotAccountSwitcherApp(ctk.CTk):
             )
             card.pack(fill="x", pady=5)
 
+        if hasattr(self, "tray_mgr") and self.tray_mgr:
+            self.tray_mgr.update_menu()
+
     def _render_empty_state(self):
         empty_frame = ctk.CTkFrame(self.scroll_frame, fg_color=Theme.SURFACE, corner_radius=12)
         empty_frame.pack(fill="both", expand=True, padx=30, pady=30)
@@ -750,3 +767,42 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 )
 
         self.after(3000, self._periodic_status_check)
+
+    # -------------------------------------------------------------------------
+    # System Tray Handlers
+    # -------------------------------------------------------------------------
+    def _on_close_to_tray(self):
+        """Minimize window to system tray when 'X' is clicked."""
+        self.withdraw()
+        if not getattr(self, "_has_shown_tray_tip", False):
+            self._has_shown_tray_tip = True
+            if self.tray_mgr:
+                self.tray_mgr.notify(
+                    "Riot Link Minimized",
+                    "Riot Link is still running in the system tray.\nRight-click the icon to reopen, switch accounts, or exit."
+                )
+
+    def _show_window_from_tray(self):
+        """Restore window from tray to foreground."""
+        self.after(0, self._restore_window)
+
+    def _restore_window(self):
+        self.deiconify()
+        self.state("normal")
+        self.lift()
+        self.focus_force()
+
+    def _switch_from_tray(self, account_id: str):
+        """Handle 1-click account switch initiated from the tray context menu."""
+        self.after(0, lambda: self._handle_switch(account_id, product="riot_client"))
+
+    def _exit_app_from_tray(self):
+        """Exit the application cleanly from tray context menu."""
+        self.after(0, self._destroy_and_exit)
+
+    def _destroy_and_exit(self):
+        if hasattr(self, "tray_mgr") and self.tray_mgr:
+            self.tray_mgr.stop()
+        self.destroy()
+        import sys
+        sys.exit(0)

@@ -23,6 +23,7 @@
 * **🎯 Direct Game Shortcuts**: Dedicated `LoL` and `VAL` buttons to jump straight into League of Legends or VALORANT.
 * **🔄 Intelligent Logout Detection**: If an account gets signed out in Riot Client, Riot Link detects it, alerts you, and provides a 1-click re-linking flow.
 * **🔄 Seamless In-App Updates**: Automatically checks GitHub Releases and performs a 1-click in-place update and restart.
+* **📥 Minimize to System Tray**: Keeps running quietly in your Windows notification tray on close (`X`), with a right-click menu to reopen, switch accounts, or exit.
 * **🎮 Profile Customization**: Organize accounts with tags (`Main`, `Smurf`, `Ranked`, `Casual`) and custom accent colors.
 * **💻 Standalone Executable**: Portable single `.exe` with zero installation required.
 
