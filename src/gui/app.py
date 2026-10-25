@@ -225,9 +225,13 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self.search_entry.pack(side="right")
         self.search_entry.bind("<KeyRelease>", self._on_search_changed)
 
-        # Notice banner for logged out / reauth accounts
+        # Notice container permanently placed between sub_bar and scroll_frame
+        self.notice_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.notice_container.pack(fill="x", padx=18, pady=0)
+
+        # Notice banner for logged out / reauth accounts (inside notice_container)
         self.notice_banner = ctk.CTkFrame(
-            self,
+            self.notice_container,
             fg_color="#451a03",
             corner_radius=8,
             border_width=1,
@@ -348,7 +352,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 text=f"⚠️ {names} was logged out in Riot Client. Sign in to Riot Client (check 'Stay signed in') and click 🔄 on the card to re-link."
             )
             if not self.notice_banner.winfo_ismapped():
-                self.notice_banner.pack(fill="x", padx=18, pady=(0, 10), before=self.scroll_frame)
+                self.notice_banner.pack(fill="x", pady=(0, 10))
         else:
             if self.notice_banner.winfo_ismapped():
                 self.notice_banner.pack_forget()
@@ -380,7 +384,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
             return
 
         for acc in accounts:
-            is_active = (acc.id == self.active_account_id)
+            is_active = (acc.id == self.active_account_id and not acc.needs_reauth)
             card = AccountCard(
                 self.scroll_frame,
                 account=acc,

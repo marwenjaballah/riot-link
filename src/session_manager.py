@@ -95,14 +95,19 @@ class SessionManager:
         try:
             with open(main_settings, "r", encoding="utf-8", errors="ignore") as f:
                 data = yaml.safe_load(f) or {}
-                persist = data.get("riot-login", {}).get("persist")
-                psl = data.get("psl", {}).get("authorization", {}).get("riot-client")
-                rso = data.get("rso-authenticator", {})
 
-                if persist is not None or psl is not None:
+                riot_login = data.get("riot-login")
+                if isinstance(riot_login, dict) and riot_login.get("persist") is not None:
                     return True
+
+                psl = data.get("psl")
+                if isinstance(psl, dict):
+                    auth = psl.get("authorization")
+                    if isinstance(auth, dict) and auth.get("riot-client") is not None:
+                        return True
+
+                rso = data.get("rso-authenticator")
                 if isinstance(rso, dict):
-                    # If any key other than tdid exists (e.g. session tokens)
                     for k in rso.keys():
                         if k != "tdid":
                             return True
@@ -384,12 +389,17 @@ class SessionManager:
         """
         Determine which account is currently active by comparing permanent account IDs.
         """
+        if not self.has_active_riot_session():
+            return None
+
         current_file = Config.RIOT_LOCAL_DIR / "Riot Client" / "Data" / "RiotGamesPrivateSettings.yaml"
         cur_sub = self.get_account_sub_id(current_file)
         if not cur_sub:
             return None
 
         for account in self.get_accounts():
+            if account.needs_reauth:
+                continue
             saved_file = self.get_account_dir(account.id) / "files" / "Riot Client" / "Data" / "RiotGamesPrivateSettings.yaml"
             if self.get_account_sub_id(saved_file) == cur_sub:
                 return account.id

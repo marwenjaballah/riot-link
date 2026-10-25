@@ -64,7 +64,7 @@ class AccountCard(ctk.CTkFrame):
             **kwargs
         )
         self.account = account
-        self.is_active = is_active
+        self.is_active = is_active and not account.needs_reauth
         self.on_switch = on_switch
         self.on_edit = on_edit
         self.on_update_token = on_update_token
