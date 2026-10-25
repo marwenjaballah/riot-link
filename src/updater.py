@@ -147,7 +147,8 @@ del "%~f0"
             # Launch updater batch detached
             DETACHED_PROCESS = 0x00000008
             CREATE_NEW_PROCESS_GROUP = 0x00000200
-            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            CREATE_NO_WINDOW = 0x08000000
+            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
 
             subprocess.Popen(
                 ["cmd.exe", "/c", str(updater_bat)],

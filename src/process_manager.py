@@ -32,59 +32,67 @@ class ProcessManager:
     @classmethod
     def close_all_riot_processes(cls, timeout: float = 4.0) -> bool:
         """
-        Closes all running Riot processes cleanly:
-        1. Sends a graceful close signal (WM_CLOSE) so Riot Client flushes settings (audio, video, preferences) to disk.
-        2. Waits up to 2 seconds for a clean exit.
-        3. Forcefully terminates any remaining stubborn processes if needed.
+        Closes all running Riot processes cleanly using psutil (pure Win32, zero console popups):
+        1. Gracefully calls proc.terminate() so Riot Client flushes settings to disk.
+        2. Waits up to 1.8 seconds for a clean exit.
+        3. Forcefully kills (proc.kill()) any remaining stubborn processes.
         4. Cleans up file locks.
         """
-        if not cls.is_riot_running():
+        procs = cls.get_running_riot_processes()
+        if not procs:
             return True
 
-        target_exes = [
-            "LeagueClientUx.exe",
-            "LeagueClient.exe",
-            "LeagueClientUxRender.exe",
-            "VALORANT.exe",
-            "VALORANT-Win64-Shipping.exe",
-            "RiotClientUx.exe",
-            "RiotClientUxRender.exe",
-            "RiotClientServices.exe",
-            "Riot Client.exe",
-        ]
-
-        # 1. Attempt graceful close without /F so settings are saved to disk
-        for exe in target_exes:
+        # Also collect child processes of each target process
+        all_procs = []
+        for p in procs:
+            all_procs.append(p)
             try:
-                subprocess.run(
-                    ["taskkill", "/IM", exe],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False
-                )
-            except Exception:
+                all_procs.extend(p.children(recursive=True))
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
-        # 2. Wait up to 1.8 seconds for processes to exit gracefully
-        grace_start = time.time()
-        while time.time() - grace_start < 1.8:
-            if not cls.is_riot_running():
-                break
-            time.sleep(0.2)
+        # Deduplicate
+        seen_pids = set()
+        unique_procs = []
+        for p in all_procs:
+            if p.pid not in seen_pids:
+                seen_pids.add(p.pid)
+                unique_procs.append(p)
 
-        # 3. If any processes remain stubborn, force-kill them
+        # 1. Gracefully terminate
+        for p in unique_procs:
+            try:
+                p.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        # 2. Wait up to 1.8 seconds for graceful exit
+        gone, alive = psutil.wait_procs(unique_procs, timeout=1.8)
+
+        # 3. Force-kill any stubborn remaining processes
+        for p in alive:
+            try:
+                p.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        # Fallback to taskkill ONLY if something is still alive, strictly with CREATE_NO_WINDOW
         if cls.is_riot_running():
-            for exe in target_exes:
+            CREATE_NO_WINDOW = 0x08000000
+            for name in Config.RIOT_PROCESS_NAMES:
                 try:
                     subprocess.run(
-                        ["taskkill", "/F", "/T", "/IM", exe],
+                        ["taskkill", "/F", "/T", "/IM", name],
+                        stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
+                        creationflags=CREATE_NO_WINDOW,
                         check=False
                     )
                 except Exception:
                     pass
-            time.sleep(0.4)
+
+        time.sleep(0.3)
 
         # 4. Remove stale lockfile if it remains
         lockfile = Config.RIOT_CLIENT_CONFIG_DIR / "lockfile"
@@ -100,7 +108,7 @@ class ProcessManager:
     def launch(cls, executable_path: Path, product: str = "riot_client") -> bool:
         """
         Launch Riot Client or a specific game (League of Legends, Valorant, TFT).
-        Runs detached so it continues running independently.
+        Runs detached and without any console window.
         """
         if not executable_path.is_file():
             raise FileNotFoundError(f"RiotClientServices.exe not found at: {executable_path}")
@@ -108,10 +116,11 @@ class ProcessManager:
         prod_cfg = Config.PRODUCTS.get(product, Config.PRODUCTS["riot_client"])
         args = [str(executable_path)] + prod_cfg["args"]
 
-        # Launch detached from current terminal/process
+        # Launch detached and completely windowless from current process
         DETACHED_PROCESS = 0x00000008
         CREATE_NEW_PROCESS_GROUP = 0x00000200
-        flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        CREATE_NO_WINDOW = 0x08000000
+        flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
 
         subprocess.Popen(
             args,
