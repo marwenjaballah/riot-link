@@ -12,7 +12,7 @@ import psutil
 
 class Config:
     APP_NAME = "Riot Link"
-    APP_VERSION = "1.0.0"
+    APP_VERSION = "0.1.1"
     APP_TAGLINE = "1-Click Account Switcher • 2FA Persistent • 100% Anti-Cheat Safe"
 
     # Branding & Repository

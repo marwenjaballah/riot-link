@@ -4,8 +4,8 @@
 #
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(0, 1, 1, 0),
+    prodvers=(0, 1, 1, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -21,12 +21,12 @@ VSVersionInfo(
           [
             StringStruct(u'CompanyName', u'Riot Link Open Source Project'),
             StringStruct(u'FileDescription', u'Riot Link - 1-Click Riot Games Account Switcher'),
-            StringStruct(u'FileVersion', u'1.0.0.0'),
+            StringStruct(u'FileVersion', u'0.1.1.0'),
             StringStruct(u'InternalName', u'RiotLink'),
             StringStruct(u'LegalCopyright', u'Copyright (c) 2026 Marwen Jaballah. Released under MIT License.'),
             StringStruct(u'OriginalFilename', u'RiotLink.exe'),
             StringStruct(u'ProductName', u'Riot Link'),
-            StringStruct(u'ProductVersion', u'1.0.0.0'),
+            StringStruct(u'ProductVersion', u'0.1.1.0'),
           ]
         )
       ]
