@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-0.1.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.1.2-blue.svg?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6.svg?style=for-the-badge)
 ![Game Memory](https://img.shields.io/badge/game%20memory-never%20touched-brightgreen.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-purple.svg?style=for-the-badge)
@@ -34,7 +34,7 @@
 
 ### Option A: Standalone Executable (Recommended)
 1. Go to the [**Releases**](https://github.com/marwenjaballah/riot-link/releases) page on GitHub.
-2. Download **`RiotLink.exe`** (or `RiotLink-v0.1.1-windows-x64.zip`).
+2. Download **`RiotLink.exe`** (or `RiotLink-v0.1.2-windows-x64.zip`).
 3. Run `RiotLink.exe`! No installation needed.
 
 > [!NOTE]
