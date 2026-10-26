@@ -1040,7 +1040,8 @@ class UpdateModal(ctk.CTkToplevel):
             self.parent.destroy()
         except Exception:
             pass
-        sys.exit(0)
+        import os
+        os._exit(0)
 
     def _on_download_error(self, err_msg: str):
         messagebox.showerror(

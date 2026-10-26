@@ -184,14 +184,16 @@ class UpdateManager:
                     "The update was NOT installed."
                 )
 
-            # Generate updater batch script that waits for process to close, swaps .exe, and restarts
+            # Generate updater batch script that guarantees old process termination, swaps .exe, and restarts
+            current_pid = os.getpid()
             bat_script = f"""@echo off
 chcp 65001 > nul
-timeout /t 1 /nobreak > nul
+taskkill /F /PID {current_pid} > nul 2>&1
+ping 127.0.0.1 -n 2 > nul
 :retry
 move /y "{tmp_exe}" "{target_exe}" > nul 2>&1
 if errorlevel 1 (
-    timeout /t 1 /nobreak > nul
+    ping 127.0.0.1 -n 2 > nul
     goto retry
 )
 start "" "{target_exe}"
