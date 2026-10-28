@@ -21,11 +21,18 @@ except ImportError as e:
     print("Please run: pip install -r requirements.txt")
     sys.exit(1)
 
+from src.single_instance import SingleInstanceManager
 from src.gui.app import RiotAccountSwitcherApp
 
 
 def main():
-    app = RiotAccountSwitcherApp()
+    # Ensure only a single instance runs at any time
+    single_instance = SingleInstanceManager()
+    if single_instance.is_already_running():
+        # The running instance has been notified to focus and restore
+        sys.exit(0)
+
+    app = RiotAccountSwitcherApp(single_instance=single_instance)
     app.mainloop()
 
 

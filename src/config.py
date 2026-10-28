@@ -12,7 +12,7 @@ import psutil
 
 class Config:
     APP_NAME = "Riot Link"
-    APP_VERSION = "0.1.2"
+    APP_VERSION = "0.1.3"
     APP_TAGLINE = "1-Click Account Switcher • 2FA Persistent • No Game Memory Access"
 
     # Branding & Repository
@@ -42,7 +42,6 @@ class Config:
     SESSION_FILES = [
         # Relative to %LOCALAPPDATA%/Riot Games
         Path("Riot Client/Data/RiotGamesPrivateSettings.yaml"),
-        Path("Riot Client/Config/RiotClientSettings.yaml"),
         Path("League of Legends/Data/RiotGamesPrivateSettings.yaml"),
         Path("VALORANT/Data/RiotGamesPrivateSettings.yaml"),
     ]

@@ -5,6 +5,7 @@ Responsive, modern gaming dashboard with custom icon and direct controls.
 
 import webbrowser
 import threading
+from typing import Optional
 from pathlib import Path
 from tkinter import messagebox
 import customtkinter as ctk
@@ -26,11 +27,16 @@ from ..updater import UpdateManager
 from ..tray import TrayIconManager
 from ..config import Config
 from ..models import AccountProfile, AppSettings
+from ..single_instance import SingleInstanceManager
 
 
 class RiotAccountSwitcherApp(ctk.CTk):
-    def __init__(self):
+    def __init__(self, single_instance: Optional[SingleInstanceManager] = None):
         super().__init__()
+
+        self.single_instance = single_instance
+        if self.single_instance:
+            self.single_instance.start_listener(on_restore=self._restore_window_from_ipc)
 
         # Window Setup
         self.title(f"{Config.APP_NAME} v{Config.APP_VERSION}")
@@ -62,6 +68,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         # State
         self.search_query = ""
+        self._search_timer = None
         self.active_account_id = None
         self._available_update = None
 
@@ -545,11 +552,24 @@ class RiotAccountSwitcherApp(ctk.CTk):
         if not self._confirm_close_running_game("switch accounts"):
             return
 
-        try:
-            self.session_mgr.switch_to_account(account_id, launch_product=product, auto_launch=True)
-            self._refresh_ui()
-        except Exception as e:
-            messagebox.showerror("Switch Error", f"Failed to switch account:\n{e}", parent=self)
+        # Immediate visual feedback
+        self.status_pill.configure(
+            text=" ⏳ SWITCHING ACCOUNT... ",
+            fg_color="#854d0e",
+            text_color="#fef08a"
+        )
+        self.update_idletasks()
+
+        def do_switch():
+            try:
+                self.session_mgr.switch_to_account(account_id, launch_product=product, auto_launch=True)
+                self.after(0, self._refresh_ui)
+            except Exception as e:
+                err_msg = str(e)
+                self.after(0, lambda: messagebox.showerror("Switch Error", f"Failed to switch account:\n{err_msg}", parent=self))
+                self.after(0, self._refresh_ui)
+
+        threading.Thread(target=do_switch, daemon=True).start()
 
     def _handle_update_token(self, account_id: str):
         target_acc = self.session_mgr.get_account(account_id)
@@ -612,12 +632,22 @@ class RiotAccountSwitcherApp(ctk.CTk):
             if not self._confirm_close_running_game("open a clean sign-in screen"):
                 return
             self._is_preparing_new_login = True
-            try:
-                self.session_mgr.prepare_new_login()
-                self.active_account_id = None
-                self._refresh_ui()
-            finally:
-                self._is_preparing_new_login = False
+            self.status_pill.configure(
+                text=" ⏳ PREPARING SIGN-IN... ",
+                fg_color="#854d0e",
+                text_color="#fef08a"
+            )
+            self.update_idletasks()
+
+            def do_prep():
+                try:
+                    self.session_mgr.prepare_new_login()
+                    self.active_account_id = None
+                finally:
+                    self._is_preparing_new_login = False
+                    self.after(0, self._refresh_ui)
+
+            threading.Thread(target=do_prep, daemon=True).start()
 
     def _confirm_close_running_game(self, action: str) -> bool:
         """
@@ -647,14 +677,28 @@ class RiotAccountSwitcherApp(ctk.CTk):
     def _handle_close_riot(self):
         if not self._confirm_close_running_game("close Riot Client"):
             return
-        closed = ProcessManager.close_all_riot_processes(timeout=4.0)
-        self._refresh_ui()
-        if closed:
-            self.status_pill.configure(
-                text=" ○ RIOT CLIENT CLOSED ",
-                fg_color=Theme.SURFACE,
-                text_color=Theme.TEXT_MUTED
-            )
+
+        self.status_pill.configure(
+            text=" ⏳ CLOSING RIOT... ",
+            fg_color="#854d0e",
+            text_color="#fef08a"
+        )
+        self.update_idletasks()
+
+        def do_close():
+            try:
+                closed = ProcessManager.close_all_riot_processes(timeout=4.0)
+            except Exception:
+                closed = False
+            self.after(0, self._refresh_ui)
+            if closed:
+                self.after(0, lambda: self.status_pill.configure(
+                    text=" ○ RIOT CLIENT CLOSED ",
+                    fg_color=Theme.SURFACE,
+                    text_color=Theme.TEXT_MUTED
+                ))
+
+        threading.Thread(target=do_close, daemon=True).start()
 
     def _check_initial_riot_path(self):
         """
@@ -750,8 +794,16 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self._refresh_ui()
 
     def _on_search_changed(self, event=None):
-        self.search_query = self.search_entry.get().strip()
-        self._refresh_ui()
+        if getattr(self, "_search_timer", None):
+            self.after_cancel(self._search_timer)
+        self._search_timer = self.after(120, self._apply_search)
+
+    def _apply_search(self):
+        self._search_timer = None
+        new_query = self.search_entry.get().strip()
+        if new_query != self.search_query:
+            self.search_query = new_query
+            self._refresh_ui()
 
     def _periodic_status_check(self):
         """Check status periodically to keep the status indicator and save button responsive."""
@@ -819,11 +871,30 @@ class RiotAccountSwitcherApp(ctk.CTk):
         """Restore window from tray to foreground."""
         self.after(0, self._restore_window)
 
+    def _restore_window_from_ipc(self):
+        """Restore window when a duplicate launch attempt is detected."""
+        self.after(0, self._restore_window)
+
     def _restore_window(self):
+        """Restore window to normal state and bring to the active foreground."""
         self.deiconify()
         self.state("normal")
+        # Pulse topmost briefly to pierce foreground-lock timeout in Windows DWM
+        self.attributes("-topmost", True)
+        self.update_idletasks()
         self.lift()
         self.focus_force()
+
+        try:
+            import ctypes
+            hwnd = self.winfo_id()
+            parent_hwnd = ctypes.windll.user32.GetParent(hwnd) or hwnd
+            ctypes.windll.user32.ShowWindow(parent_hwnd, 9)  # 9 = SW_RESTORE
+            ctypes.windll.user32.SetForegroundWindow(parent_hwnd)
+        except Exception:
+            pass
+
+        self.after(60, lambda: self.attributes("-topmost", False))
 
     def _switch_from_tray(self, account_id: str):
         """Handle 1-click account switch initiated from the tray context menu."""
@@ -834,6 +905,8 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self.after(0, self._destroy_and_exit)
 
     def _destroy_and_exit(self):
+        if hasattr(self, "single_instance") and self.single_instance:
+            self.single_instance.cleanup()
         if hasattr(self, "tray_mgr") and self.tray_mgr:
             self.tray_mgr.stop()
         self.destroy()

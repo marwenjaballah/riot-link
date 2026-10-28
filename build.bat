@@ -12,7 +12,7 @@ python -m pip install -r requirements.txt
 
 echo.
 echo [2/3] Compiling with PyInstaller...
-pyinstaller --clean -y RiotLink.spec
+python -m PyInstaller --clean -y RiotLink.spec
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

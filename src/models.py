@@ -11,6 +11,7 @@ class AccountProfile(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     username_hint: str = ""
+    sub_id: str | None = None
     tag: str = "Main"
     color: str = "#ff4655"
     preferred_game: str = "riot_client"

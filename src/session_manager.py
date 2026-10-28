@@ -18,6 +18,14 @@ class SessionManager:
     def __init__(self):
         Config.ensure_directories()
         self.settings = self.load_settings()
+        self._active_session_cache = {
+            "mtime_ns": 0,
+            "size": 0,
+            "has_session": False,
+            "sub_id": None,
+            "username_hint": ""
+        }
+        self._sub_cache = {}
 
     def load_settings(self) -> AppSettings:
         """Load settings from settings.json or create default."""
@@ -84,64 +92,106 @@ class SessionManager:
     def get_account_dir(self, account_id: str) -> Path:
         return Config.PROFILES_DIR / account_id
 
-    def has_active_riot_session(self) -> bool:
+    def invalidate_session_cache(self):
+        """Invalidate in-memory cache when session files are swapped or cleaned."""
+        self._active_session_cache = {
+            "mtime_ns": 0,
+            "size": 0,
+            "has_session": False,
+            "sub_id": None,
+            "username_hint": ""
+        }
+
+    def _get_active_session_info(self) -> dict:
         """
-        Check if Riot Client currently has an active logged-in session.
-        Validates that riot-login: persist or psl authorization is not null.
+        Fast cached inspection of Riot Client's active session.
+        Checks file mtime & size before doing any disk reading or YAML parsing.
         """
         main_settings = Config.RIOT_LOCAL_DIR / "Riot Client" / "Data" / "RiotGamesPrivateSettings.yaml"
         if not main_settings.is_file():
-            return False
+            self._active_session_cache = {
+                "mtime_ns": 0,
+                "size": 0,
+                "has_session": False,
+                "sub_id": None,
+                "username_hint": ""
+            }
+            return self._active_session_cache
+
+        try:
+            stat = main_settings.stat()
+            mtime_ns = stat.st_mtime_ns
+            size = stat.st_size
+        except OSError:
+            return self._active_session_cache
+
+        if mtime_ns == self._active_session_cache["mtime_ns"] and size == self._active_session_cache["size"]:
+            return self._active_session_cache
+
+        has_session = False
+        sub_id = None
+        username_hint = ""
+
         try:
             with open(main_settings, "r", encoding="utf-8", errors="ignore") as f:
                 data = yaml.safe_load(f) or {}
 
                 riot_login = data.get("riot-login")
                 if isinstance(riot_login, dict) and riot_login.get("persist") is not None:
-                    return True
+                    has_session = True
 
                 psl = data.get("psl")
                 if isinstance(psl, dict):
                     auth = psl.get("authorization")
                     if isinstance(auth, dict) and auth.get("riot-client") is not None:
-                        return True
+                        has_session = True
 
                 rso = data.get("rso-authenticator")
                 if isinstance(rso, dict):
                     for k in rso.keys():
                         if k != "tdid":
-                            return True
-        except Exception:
-            pass
-        return False
+                            has_session = True
+                            break
 
-    def extract_session_username_hint(self) -> str:
-        """Attempt to extract username/alias hint from RiotGamesPrivateSettings.yaml."""
-        import base64
-        main_yaml = Config.RIOT_LOCAL_DIR / "Riot Client" / "Data" / "RiotGamesPrivateSettings.yaml"
-        if not main_yaml.is_file():
-            return ""
-        try:
-            with open(main_yaml, "r", encoding="utf-8", errors="ignore") as f:
-                data = yaml.safe_load(f) or {}
                 id_token = data.get("psl", {}).get("authorization", {}).get("riot-client", {}).get("id_token")
                 if id_token:
+                    import base64
                     parts = id_token.split(".")
                     if len(parts) >= 2:
                         payload_b64 = parts[1]
                         payload_b64 += "=" * ((4 - len(payload_b64) % 4) % 4)
                         payload_bytes = base64.urlsafe_b64decode(payload_b64)
                         payload = json.loads(payload_bytes.decode("utf-8", errors="ignore"))
+                        sub_id = payload.get("sub")
                         acct = payload.get("acct", {})
                         game_name = acct.get("game_name")
                         tag_line = acct.get("tag_line")
                         if game_name and tag_line:
-                            return f"{game_name}#{tag_line}"
-                        if game_name:
-                            return game_name
+                            username_hint = f"{game_name}#{tag_line}"
+                        elif game_name:
+                            username_hint = game_name
         except Exception:
             pass
-        return ""
+
+        self._active_session_cache = {
+            "mtime_ns": mtime_ns,
+            "size": size,
+            "has_session": has_session,
+            "sub_id": sub_id,
+            "username_hint": username_hint
+        }
+        return self._active_session_cache
+
+    def has_active_riot_session(self) -> bool:
+        """
+        Check if Riot Client currently has an active logged-in session.
+        Uses mtime-cached inspection for near-zero CPU usage.
+        """
+        return self._get_active_session_info()["has_session"]
+
+    def extract_session_username_hint(self) -> str:
+        """Attempt to extract username/alias hint from RiotGamesPrivateSettings.yaml."""
+        return self._get_active_session_info()["username_hint"]
 
     def save_current_account(
         self,
@@ -161,12 +211,14 @@ class SessionManager:
                 "Please open Riot Client, log into your account with 'Stay signed in' checked, then try again."
             )
 
+        session_info = self._get_active_session_info()
         account = AccountProfile(
             name=name,
             tag=tag,
             color=color,
             preferred_game=preferred_game,
-            username_hint=username_hint or self.extract_session_username_hint(),
+            username_hint=username_hint or session_info.get("username_hint") or "",
+            sub_id=session_info.get("sub_id"),
             notes=notes
         )
         account.mark_used()
@@ -228,11 +280,16 @@ class SessionManager:
                     shutil.rmtree(dest_dir)
                 shutil.copytree(src_dir, dest_dir)
 
+        session_info = self._get_active_session_info()
         meta_file = profile_dir / "profile.json"
         with open(meta_file, "r", encoding="utf-8") as f:
             account = AccountProfile(**json.load(f))
         account.mark_used()
         account.needs_reauth = False
+        if session_info.get("sub_id"):
+            account.sub_id = session_info.get("sub_id")
+        if not account.username_hint and session_info.get("username_hint"):
+            account.username_hint = session_info.get("username_hint")
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(account.model_dump(), f, indent=2, ensure_ascii=False)
 
@@ -302,8 +359,9 @@ class SessionManager:
                 dest_dir.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(src_dir, dest_dir)
 
-        # 4. Update last_used timestamp
+        # 4. Update last_used timestamp & invalidate active cache
         account.mark_used()
+        self.invalidate_session_cache()
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(account.model_dump(), f, indent=2)
 
@@ -348,6 +406,7 @@ class SessionManager:
                 except OSError:
                     pass
 
+        self.invalidate_session_cache()
         exe_path = Path(self.settings.riot_client_path or "")
         if not exe_path.is_file():
             detected = Config.find_riot_client_path()
@@ -366,11 +425,20 @@ class SessionManager:
             shutil.rmtree(profile_dir, ignore_errors=True)
 
     def get_account_sub_id(self, yaml_path: Path) -> Optional[str]:
-        """Extract permanent Riot account subject UUID from id_token."""
-        import base64
+        """Extract permanent Riot account subject UUID from id_token with caching."""
         if not yaml_path.is_file():
             return None
         try:
+            stat = yaml_path.stat()
+            cache_key = (str(yaml_path), stat.st_mtime_ns, stat.st_size)
+            if cache_key in self._sub_cache:
+                return self._sub_cache[cache_key]
+        except OSError:
+            pass
+
+        sub = None
+        try:
+            import base64
             with open(yaml_path, "r", encoding="utf-8", errors="ignore") as f:
                 data = yaml.safe_load(f) or {}
                 id_token = data.get("psl", {}).get("authorization", {}).get("riot-client", {}).get("id_token")
@@ -380,27 +448,46 @@ class SessionManager:
                         payload_b64 = parts[1]
                         payload_b64 += "=" * ((4 - len(payload_b64) % 4) % 4)
                         payload = json.loads(base64.urlsafe_b64decode(payload_b64).decode("utf-8", errors="ignore"))
-                        return payload.get("sub")
+                        sub = payload.get("sub")
         except Exception:
             pass
-        return None
+
+        try:
+            stat = yaml_path.stat()
+            self._sub_cache[(str(yaml_path), stat.st_mtime_ns, stat.st_size)] = sub
+        except Exception:
+            pass
+
+        return sub
 
     def get_active_account_id(self) -> Optional[str]:
         """
         Determine which account is currently active by comparing permanent account IDs.
+        Uses in-memory sub_id caching to avoid re-parsing YAML files.
         """
-        if not self.has_active_riot_session():
+        info = self._get_active_session_info()
+        if not info["has_session"] or not info["sub_id"]:
             return None
 
-        current_file = Config.RIOT_LOCAL_DIR / "Riot Client" / "Data" / "RiotGamesPrivateSettings.yaml"
-        cur_sub = self.get_account_sub_id(current_file)
-        if not cur_sub:
-            return None
+        cur_sub = info["sub_id"]
 
         for account in self.get_accounts():
             if account.needs_reauth:
                 continue
+
+            # Fast path: check cached sub_id in account model
+            if account.sub_id:
+                if account.sub_id == cur_sub:
+                    return account.id
+                continue
+
+            # Fallback path for legacy profiles: extract sub_id once and persist it
             saved_file = self.get_account_dir(account.id) / "files" / "Riot Client" / "Data" / "RiotGamesPrivateSettings.yaml"
-            if self.get_account_sub_id(saved_file) == cur_sub:
-                return account.id
+            sub = self.get_account_sub_id(saved_file)
+            if sub:
+                account.sub_id = sub
+                self.update_account_metadata(account)
+                if sub == cur_sub:
+                    return account.id
+
         return None

@@ -61,30 +61,26 @@ class ProcessManager:
     def get_running_games() -> List[str]:
         """
         Check if any Riot game match (League of Legends, VALORANT) is currently running.
-        Uses native Windows tasklist filter (zero process handles opened from Python).
+        Uses a single native Windows tasklist query (zero process handles opened from Python).
         """
         found = []
         CREATE_NO_WINDOW = 0x08000000
 
-        for exe_name, display_name in Config.GAME_PROCESS_NAMES.items():
-            if display_name in found:
-                continue
-            try:
-                # Query native Windows tasklist directly for this specific image name
-                res = subprocess.run(
-                    ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/NH"],
-                    capture_output=True,
-                    text=True,
-                    creationflags=CREATE_NO_WINDOW,
-                    timeout=1.5,
-                    check=False
-                )
-                output = res.stdout or ""
-                # If running, tasklist outputs the image name and PID; if not, it outputs "INFO: No tasks..."
-                if exe_name.lower() in output.lower():
+        try:
+            res = subprocess.run(
+                ["tasklist", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                creationflags=CREATE_NO_WINDOW,
+                timeout=2.0,
+                check=False
+            )
+            output = (res.stdout or "").lower()
+            for exe_name, display_name in Config.GAME_PROCESS_NAMES.items():
+                if display_name not in found and exe_name.lower() in output:
                     found.append(display_name)
-            except Exception:
-                pass
+        except Exception:
+            pass
 
         return found
 
