@@ -1015,12 +1015,14 @@ class UpdateModal(ctk.CTkToplevel):
                 text = f"Downloading: {mb_curr:.1f} MB / {mb_tot:.1f} MB ({pct}%)"
                 self.after(0, lambda: self._update_ui_progress(fraction, text))
 
-            UpdateManager.download_and_apply_update(
+            tmp_exe, target_exe = UpdateManager.download_and_verify_update(
                 download_url,
                 progress_callback=on_progress,
                 checksums_url=self.release_info.get("checksums_url"),
                 asset_name=self.release_info.get("asset_name"),
             )
+            self._tmp_exe = tmp_exe
+            self._target_exe = target_exe
             self.after(0, self._on_download_complete)
         except Exception as e:
             err_msg = str(e)
@@ -1032,16 +1034,23 @@ class UpdateModal(ctk.CTkToplevel):
 
     def _on_download_complete(self):
         self.progress_bar.set(1.0)
-        self.progress_lbl.configure(text="✅ Update applied! Restarting Riot Link...", text_color="#10b981")
-        self.after(1200, self._finish_restart)
+        self.progress_lbl.configure(text="✅ Update verified! Applying and restarting...", text_color="#10b981")
+        self.after(800, self._finish_restart)
 
     def _finish_restart(self):
+        from ...updater import UpdateManager
+        # Release single instance mutex and stop tray icon before replacing
         try:
+            if hasattr(self.parent, "single_instance") and self.parent.single_instance:
+                self.parent.single_instance.cleanup()
+            if hasattr(self.parent, "tray_mgr") and self.parent.tray_mgr:
+                self.parent.tray_mgr.stop()
             self.parent.destroy()
         except Exception:
             pass
-        import os
-        os._exit(0)
+
+        # Perform in-place rename and native restart (zero cmd prompt)
+        UpdateManager.apply_update_and_restart(self._tmp_exe, self._target_exe)
 
     def _on_download_error(self, err_msg: str):
         messagebox.showerror(

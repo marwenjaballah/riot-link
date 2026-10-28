@@ -121,15 +121,25 @@ class UpdateManager:
         raise RuntimeError(f"No SHA256 entry for '{asset_name}' found in checksums.txt.")
 
     @staticmethod
-    def download_and_apply_update(
+    def get_target_exe() -> Path:
+        """Determine the target executable path."""
+        if getattr(sys, "frozen", False):
+            return Path(sys.executable).resolve()
+        target_exe = Config.APP_DATA_DIR.parent / "dist" / "RiotLink.exe"
+        if not target_exe.parent.exists():
+            target_exe = Path(__file__).resolve().parent.parent / "dist" / "RiotLink.exe"
+        return target_exe
+
+    @staticmethod
+    def download_and_verify_update(
         download_url: str,
         progress_callback: Optional[Callable[[float, int, int], None]] = None,
         checksums_url: Optional[str] = None,
         asset_name: Optional[str] = None,
-    ) -> bool:
+    ) -> tuple[Path, Path]:
         """
-        Download updated RiotLink.exe from GitHub, verify its SHA256 against the
-        release's checksums.txt, and only then execute the in-place replacement.
+        Download updated RiotLink.exe from GitHub and verify its SHA256 against checksums.txt.
+        Returns (tmp_exe, target_exe) ready for in-place replacement.
         """
         if not checksums_url:
             raise RuntimeError(
@@ -137,18 +147,8 @@ class UpdateManager:
                 "Automatic update was cancelled for your safety."
             )
         asset_name = asset_name or "RiotLink.exe"
-
-        # Determine the target executable path
-        if getattr(sys, "frozen", False):
-            target_exe = Path(sys.executable).resolve()
-        else:
-            # If running from source, target dist/RiotLink.exe
-            target_exe = Config.APP_DATA_DIR.parent / "dist" / "RiotLink.exe"
-            if not target_exe.parent.exists():
-                target_exe = Path(__file__).resolve().parent.parent / "dist" / "RiotLink.exe"
-
+        target_exe = UpdateManager.get_target_exe()
         tmp_exe = target_exe.parent / f"{target_exe.stem}_new.tmp"
-        updater_bat = target_exe.parent / "_apply_update.bat"
 
         try:
             expected_sha256 = UpdateManager.fetch_expected_sha256(checksums_url, asset_name)
@@ -184,39 +184,7 @@ class UpdateManager:
                     "The update was NOT installed."
                 )
 
-            # Generate updater batch script that guarantees old process termination, swaps .exe, and restarts
-            current_pid = os.getpid()
-            bat_script = f"""@echo off
-chcp 65001 > nul
-taskkill /F /PID {current_pid} > nul 2>&1
-ping 127.0.0.1 -n 2 > nul
-:retry
-move /y "{tmp_exe}" "{target_exe}" > nul 2>&1
-if errorlevel 1 (
-    ping 127.0.0.1 -n 2 > nul
-    goto retry
-)
-start "" "{target_exe}"
-del "%~f0"
-"""
-            with open(updater_bat, "w", encoding="utf-8") as f:
-                f.write(bat_script)
-
-            # Launch updater batch detached
-            DETACHED_PROCESS = 0x00000008
-            CREATE_NEW_PROCESS_GROUP = 0x00000200
-            CREATE_NO_WINDOW = 0x08000000
-            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
-
-            subprocess.Popen(
-                ["cmd.exe", "/c", str(updater_bat)],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=flags,
-                close_fds=True
-            )
-            return True
+            return tmp_exe, target_exe
         except Exception as e:
             if tmp_exe.exists():
                 try:
@@ -224,3 +192,61 @@ del "%~f0"
                 except OSError:
                     pass
             raise RuntimeError(f"Update failed: {e}")
+
+    @staticmethod
+    def apply_update_and_restart(tmp_exe: Path, target_exe: Path):
+        """
+        Seamlessly apply the update in-place without any batch files or console flashing.
+        Windows NTFS allows renaming a running executable to .old.
+        The new binary is then moved into place and started immediately.
+        """
+        try:
+            old_exe = target_exe.with_suffix(".exe.old")
+            # If an old file already exists from a previous update, clean it up
+            if old_exe.is_file():
+                try:
+                    old_exe.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+            # 1. Rename running executable to .old (succeeds even while running on Windows)
+            if target_exe.is_file():
+                target_exe.rename(old_exe)
+
+            # 2. Rename new executable to the target executable path
+            tmp_exe.rename(target_exe)
+
+            # 3. Launch the new executable natively through Windows Shell (zero cmd prompt)
+            try:
+                os.startfile(str(target_exe))
+            except Exception:
+                DETACHED_PROCESS = 0x00000008
+                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                CREATE_NO_WINDOW = 0x08000000
+                subprocess.Popen(
+                    [str(target_exe)],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+                    close_fds=True
+                )
+
+            # 4. Terminate the old process cleanly and immediately
+            os._exit(0)
+        except Exception as e:
+            raise RuntimeError(f"Could not apply update: {e}")
+
+    @staticmethod
+    def download_and_apply_update(
+        download_url: str,
+        progress_callback: Optional[Callable[[float, int, int], None]] = None,
+        checksums_url: Optional[str] = None,
+        asset_name: Optional[str] = None,
+    ) -> bool:
+        """Convenience method to download, verify, apply, and restart in sequence."""
+        tmp_exe, target_exe = UpdateManager.download_and_verify_update(
+            download_url, progress_callback, checksums_url, asset_name
+        )
+        UpdateManager.apply_update_and_restart(tmp_exe, target_exe)
+        return True

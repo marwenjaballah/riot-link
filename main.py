@@ -25,7 +25,23 @@ from src.single_instance import SingleInstanceManager
 from src.gui.app import RiotAccountSwitcherApp
 
 
+def cleanup_old_executable():
+    """Clean up any .exe.old file left behind after an in-place self-update."""
+    try:
+        if getattr(sys, "frozen", False):
+            exe_path = Path(sys.executable).resolve()
+        else:
+            exe_path = BASE_DIR / "dist" / "RiotLink.exe"
+        old_exe = exe_path.with_suffix(".exe.old")
+        if old_exe.is_file():
+            old_exe.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def main():
+    cleanup_old_executable()
+
     # Ensure only a single instance runs at any time
     single_instance = SingleInstanceManager()
     if single_instance.is_already_running():
