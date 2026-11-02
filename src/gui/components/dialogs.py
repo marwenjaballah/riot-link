@@ -369,7 +369,7 @@ class SettingsModal(ctk.CTkToplevel):
         self.on_export = on_export
         self.on_import = on_import
         self.title("Application Settings")
-        self.geometry("540x540")
+        self.geometry("540x570")
         self.resizable(False, False)
         self.configure(fg_color=Theme.BG_DARK)
         self.transient(parent)
@@ -377,7 +377,7 @@ class SettingsModal(ctk.CTkToplevel):
 
         self.update_idletasks()
         px = parent.winfo_x() + (parent.winfo_width() - 540) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 540) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 570) // 2
         self.geometry(f"+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
@@ -476,9 +476,24 @@ class SettingsModal(ctk.CTkToplevel):
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=Theme.TEXT_PRIMARY,
             fg_color=Theme.ACCENT_CYAN,
-            hover_color=Theme.ACCENT_CYAN_HOVER
+            hover_color=Theme.ACCENT_CYAN_HOVER,
+            command=self._on_start_with_windows_toggled
         )
-        self.start_with_windows_cb.pack(anchor="w", pady=(2, 12))
+        self.start_with_windows_cb.pack(anchor="w", pady=(2, 4))
+
+        # Start Minimized (sub-option under Start with Windows)
+        self.start_minimized_var = ctk.BooleanVar(value=getattr(self.settings, "start_minimized", True))
+        self.start_minimized_cb = ctk.CTkCheckBox(
+            content,
+            text="Start minimized (hide to system tray on boot)",
+            variable=self.start_minimized_var,
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=Theme.TEXT_SECONDARY if self.start_with_windows_var.get() else Theme.TEXT_MUTED,
+            fg_color=Theme.ACCENT_CYAN,
+            hover_color=Theme.ACCENT_CYAN_HOVER,
+            state="normal" if self.start_with_windows_var.get() else "disabled"
+        )
+        self.start_minimized_cb.pack(anchor="w", padx=(26, 0), pady=(0, 10))
 
         # Backup & Restore Section
         backup_card = ctk.CTkFrame(content, fg_color=Theme.SURFACE, corner_radius=8, border_width=1, border_color=Theme.CARD_BORDER)
@@ -573,12 +588,26 @@ class SettingsModal(ctk.CTkToplevel):
         if self.on_import:
             self.on_import()
 
+    def _on_start_with_windows_toggled(self):
+        enabled = self.start_with_windows_var.get()
+        if enabled:
+            self.start_minimized_cb.configure(
+                state="normal",
+                text_color=Theme.TEXT_SECONDARY
+            )
+        else:
+            self.start_minimized_cb.configure(
+                state="disabled",
+                text_color=Theme.TEXT_MUTED
+            )
+
     def _handle_save(self):
         path_val = self.path_entry.get().strip()
         self.settings.riot_client_path = path_val or None
         self.settings.auto_launch = self.auto_launch_var.get()
         self.settings.close_after_launch = self.close_after_launch_var.get()
         self.settings.start_with_windows = self.start_with_windows_var.get()
+        self.settings.start_minimized = self.start_minimized_var.get()
         self.destroy()
         self.on_save(self.settings)
 

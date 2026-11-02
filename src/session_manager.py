@@ -14,7 +14,7 @@ import yaml
 from .config import Config
 from .models import AccountProfile, AppSettings
 from .process_manager import ProcessManager
-from .autostart import is_autostart_enabled, set_autostart
+from .autostart import is_autostart_enabled, is_autostart_minimized, set_autostart
 from .logger import get_logger
 
 logger = get_logger("SessionManager")
@@ -54,7 +54,11 @@ class SessionManager:
                 logger.warning(f"Failed to load settings: {e}")
 
         # Sync autostart status from Windows registry
-        settings.start_with_windows = is_autostart_enabled()
+        if is_autostart_enabled():
+            settings.start_with_windows = True
+            settings.start_minimized = is_autostart_minimized()
+        else:
+            settings.start_with_windows = False
 
         # Auto-detect Riot Client path if unset
         if not settings.riot_client_path:
@@ -69,7 +73,7 @@ class SessionManager:
         """Persist settings to settings.json atomically and sync autostart."""
         self.settings = settings
         _write_json_atomic(Config.SETTINGS_FILE, settings.model_dump())
-        set_autostart(settings.start_with_windows)
+        set_autostart(settings.start_with_windows, minimized=getattr(settings, "start_minimized", True))
         logger.info("Application settings saved.")
 
     def get_accounts(self) -> List[AccountProfile]:

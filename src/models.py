@@ -31,4 +31,5 @@ class AppSettings(BaseModel):
     default_game: str = "riot_client"
     close_after_launch: bool = False
     start_with_windows: bool = False
+    start_minimized: bool = True
     theme_mode: str = "dark"
