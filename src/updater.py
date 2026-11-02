@@ -203,7 +203,8 @@ class UpdateManager:
         """
         current_pid = os.getpid()
         old_exe = target_exe.with_suffix(".exe.old")
-        vbs_path = target_exe.parent / "_silent_update.vbs"
+        import tempfile
+        vbs_path = Path(tempfile.gettempdir()) / f"riotlink_update_{current_pid}.vbs"
 
         escaped_target = str(target_exe).replace('"', '""')
         escaped_old = str(old_exe).replace('"', '""')
@@ -220,15 +221,25 @@ targetExe = "{escaped_target}"
 oldExe = "{escaped_old}"
 tmpExe = "{escaped_tmp}"
 
-' 1. Wait for parent PID to exit completely
+' 1. Wait for parent PID to exit completely (with timeout safety)
+Dim hasWmi, waitCount
+waitCount = 0
 On Error Resume Next
 Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")
-Do
-    Set procs = wmi.ExecQuery("Select ProcessId from Win32_Process Where ProcessId = " & targetPID)
-    If procs.Count = 0 Then Exit Do
-    WScript.Sleep 150
-Loop
+hasWmi = (Err.Number = 0)
 On Error GoTo 0
+
+Do
+    If hasWmi Then
+        On Error Resume Next
+        Set procs = wmi.ExecQuery("Select ProcessId from Win32_Process Where ProcessId = " & targetPID)
+        If Err.Number <> 0 Or procs.Count = 0 Then Exit Do
+        On Error GoTo 0
+    End If
+    WScript.Sleep 150
+    waitCount = waitCount + 1
+    If waitCount > 40 Then Exit Do
+Loop
 
 ' 2. Give the OS loader 250ms to release file locks
 WScript.Sleep 250
@@ -236,7 +247,7 @@ WScript.Sleep 250
 ' 3. Perform the swap
 Dim i, success
 success = False
-For i = 1 To 30
+For i = 1 To 40
     On Error Resume Next
     If fso.FileExists(targetExe) Then
         If fso.FileExists(oldExe) Then fso.DeleteFile oldExe, True
@@ -259,12 +270,22 @@ On Error Resume Next
 If fso.FileExists(oldExe) Then fso.DeleteFile oldExe, True
 On Error GoTo 0
 
-' 5. Launch updated application (ZERO console window!)
+' 5. Clean PyInstaller environment variables so new process extracts its own DLLs cleanly
+On Error Resume Next
+Dim procEnv
+Set procEnv = wsh.Environment("Process")
+procEnv.Remove("_MEIPASS2")
+procEnv.Remove("_MEIPASS")
+procEnv.Remove("PYI_STATIC_ZLIB")
+wsh.CurrentDirectory = fso.GetParentFolderName(targetExe)
+On Error GoTo 0
+
+' 6. Launch updated application (ZERO console window!)
 If success Or fso.FileExists(targetExe) Then
     wsh.Run Chr(34) & targetExe & Chr(34), 1, False
 End If
 
-' 6. Self-delete this script
+' 7. Self-delete this script
 On Error Resume Next
 fso.DeleteFile WScript.ScriptFullName, True
 '''
@@ -279,6 +300,19 @@ fso.DeleteFile WScript.ScriptFullName, True
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = 0  # SW_HIDE
 
+            # Strip PyInstaller runtime variables from child process environment
+            # so the new executable does not attempt to load Python DLLs from the
+            # old instance's deleted _MEI temporary folder.
+            clean_env = dict(os.environ)
+            clean_env.pop("_MEIPASS2", None)
+            clean_env.pop("_MEIPASS", None)
+            clean_env.pop("PYI_STATIC_ZLIB", None)
+
+            mei_dir = getattr(sys, "_MEIPASS", None)
+            if mei_dir and "PATH" in clean_env:
+                paths = [p for p in clean_env["PATH"].split(os.pathsep) if p and os.path.abspath(p) != os.path.abspath(mei_dir)]
+                clean_env["PATH"] = os.pathsep.join(paths)
+
             subprocess.Popen(
                 [wscript_cmd, "//B", "//NoLogo", str(vbs_path)],
                 stdin=subprocess.DEVNULL,
@@ -286,7 +320,8 @@ fso.DeleteFile WScript.ScriptFullName, True
                 stderr=subprocess.DEVNULL,
                 startupinfo=startupinfo,
                 creationflags=0x08000000,
-                close_fds=True
+                close_fds=True,
+                env=clean_env
             )
             os._exit(0)
         except Exception as e:
