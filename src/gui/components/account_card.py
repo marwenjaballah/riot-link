@@ -4,7 +4,7 @@ Uniform button sizing and crisp high-DPI icon assets.
 """
 
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 from datetime import datetime
 import customtkinter as ctk
 from PIL import Image
@@ -38,10 +38,11 @@ class AccountCard(ctk.CTkFrame):
         parent,
         account: AccountProfile,
         is_active: bool,
-        on_switch: Callable[[str, str], None],
+        on_switch: Callable[[str], None],
         on_edit: Callable[[AccountProfile], None],
         on_update_token: Callable[[str], None],
         on_delete: Callable[[str], None],
+        on_toggle_pin: Optional[Callable[[str], None]] = None,
         **kwargs
     ):
         if account.needs_reauth:
@@ -68,6 +69,7 @@ class AccountCard(ctk.CTkFrame):
         self.on_edit = on_edit
         self.on_update_token = on_update_token
         self.on_delete = on_delete
+        self.on_toggle_pin = on_toggle_pin
 
         self._build_card()
 
@@ -128,7 +130,20 @@ class AccountCard(ctk.CTkFrame):
             corner_radius=4,
             height=20
         )
-        tag_lbl.pack(side="left", padx=(0, 8))
+        tag_lbl.pack(side="left", padx=(0, 6))
+
+        # Pinned badge
+        if getattr(self.account, "is_pinned", False):
+            pin_badge = ctk.CTkLabel(
+                top_row,
+                text=" 📌 PINNED ",
+                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                fg_color="#362610",
+                text_color="#fbbf24",
+                corner_radius=4,
+                height=20
+            )
+            pin_badge.pack(side="left", padx=(0, 6))
 
         # Status badges
         if self.account.needs_reauth:
@@ -184,10 +199,8 @@ class AccountCard(ctk.CTkFrame):
                 )
                 sep_lbl.pack(side="left", padx=(0, 6))
 
-            game_name = Config.PRODUCTS.get(self.account.preferred_game, {}).get("name", "Riot Client")
             last_used_str = self._format_last_used(self.account.last_used)
-
-            sub_text = f"Default: {game_name} • {last_used_str}"
+            sub_text = f"Last switched: {last_used_str}"
             sub_lbl = ctk.CTkLabel(
                 bottom_row,
                 text=sub_text,
@@ -196,76 +209,79 @@ class AccountCard(ctk.CTkFrame):
             )
             sub_lbl.pack(side="left")
 
+            if self.account.notes:
+                notes_lbl = ctk.CTkLabel(
+                    bottom_row,
+                    text=f"• 📝 {self.account.notes}",
+                    font=ctk.CTkFont(family="Segoe UI", size=11),
+                    text_color=Theme.TEXT_SECONDARY
+                )
+                notes_lbl.pack(side="left", padx=(6, 0))
+
         # 3. Right Action Buttons: Uniform dimensions, pixel-perfect alignment
         actions_frame = ctk.CTkFrame(inner, fg_color="transparent")
         actions_frame.pack(side="right", padx=(8, 0))
 
-        # Direct Game Buttons (LoL, VAL) - Height: 34
-        lol_btn = ctk.CTkButton(
-            actions_frame,
-            text="LoL",
-            width=40,
-            height=34,
-            corner_radius=6,
-            fg_color=Theme.SURFACE,
-            hover_color=Theme.SURFACE_HOVER,
-            text_color=Theme.ACCENT_GOLD,
-            border_width=1,
-            border_color="#3b321c",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            command=lambda: self.on_switch(self.account.id, "league_of_legends")
-        )
-        lol_btn.pack(side="left", padx=2)
-
-        val_btn = ctk.CTkButton(
-            actions_frame,
-            text="VAL",
-            width=40,
-            height=34,
-            corner_radius=6,
-            fg_color=Theme.SURFACE,
-            hover_color=Theme.SURFACE_HOVER,
-            text_color=Theme.ACCENT_RED,
-            border_width=1,
-            border_color="#421a22",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            command=lambda: self.on_switch(self.account.id, "valorant")
-        )
-        val_btn.pack(side="left", padx=2)
-
-        # Primary Switch / Play button - EXACT width: 115, height: 34 on ALL cards!
+        # Primary Switch / Open Riot button (Zero game tampering - pure Riot Client launcher)
         if self.account.needs_reauth:
             switch_btn_text = "RE-LOGIN"
             primary_fg = "#9a3412"
             primary_hover = "#c2410c"
             primary_text_col = "#ffffff"
+            btn_w = 120
         elif self.is_active:
-            switch_btn_text = "PLAY"
+            switch_btn_text = "OPEN RIOT"
             primary_fg = Theme.ACCENT_CYAN
             primary_hover = Theme.ACCENT_CYAN_HOVER
             primary_text_col = "#000000"
+            btn_w = 130
         else:
-            switch_btn_text = "SWITCH & PLAY"
+            switch_btn_text = "SWITCH ACCOUNT"
             primary_fg = Theme.ACCENT_RED
             primary_hover = Theme.ACCENT_RED_HOVER
             primary_text_col = "#ffffff"
+            btn_w = 140
 
         primary_btn = ctk.CTkButton(
             actions_frame,
             text=switch_btn_text,
-            width=115,
+            width=btn_w,
             height=34,
             corner_radius=6,
             fg_color=primary_fg,
             hover_color=primary_hover,
             text_color=primary_text_col,
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            command=lambda: self.on_switch(self.account.id, self.account.preferred_game)
+            command=lambda: self.on_switch(self.account.id)
         )
         primary_btn.pack(side="left", padx=(3, 6))
 
         # Crisp High-DPI Vector Icons (Uniform 34x34)
         edit_icon, refresh_icon, trash_icon = get_action_icons()
+
+        # Icon Button 0: Pin / Unpin Account (📌)
+        if self.on_toggle_pin:
+            is_pin = getattr(self.account, "is_pinned", False)
+            pin_fg = "#362610" if is_pin else Theme.SURFACE
+            pin_hover = "#4a3516" if is_pin else Theme.SURFACE_HOVER
+            pin_border = "#b45309" if is_pin else Theme.CARD_BORDER
+            pin_text_col = "#fbbf24" if is_pin else Theme.TEXT_MUTED
+
+            pin_btn = ctk.CTkButton(
+                actions_frame,
+                text="📌",
+                font=ctk.CTkFont(size=12),
+                width=34,
+                height=34,
+                corner_radius=6,
+                fg_color=pin_fg,
+                hover_color=pin_hover,
+                text_color=pin_text_col,
+                border_width=1,
+                border_color=pin_border,
+                command=lambda: self.on_toggle_pin(self.account.id)
+            )
+            pin_btn.pack(side="left", padx=2)
 
         # Icon Button 1: Edit Account (✏️)
         edit_btn = ctk.CTkButton(

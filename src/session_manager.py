@@ -2,9 +2,11 @@
 Session Manager for backing up, restoring, and switching Riot Client account sessions.
 """
 
+import os
 import json
 import shutil
 import hashlib
+import zipfile
 from pathlib import Path
 from typing import List, Optional
 import yaml
@@ -12,6 +14,19 @@ import yaml
 from .config import Config
 from .models import AccountProfile, AppSettings
 from .process_manager import ProcessManager
+from .autostart import is_autostart_enabled, set_autostart
+from .logger import get_logger
+
+logger = get_logger("SessionManager")
+
+
+def _write_json_atomic(filepath: Path, data: dict):
+    """Write dictionary to file atomically via a temporary file to prevent corruption."""
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    tmp_file = filepath.parent / f"{filepath.name}.tmp"
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_file, filepath)
 
 
 class SessionManager:
@@ -28,30 +43,37 @@ class SessionManager:
         self._sub_cache = {}
 
     def load_settings(self) -> AppSettings:
-        """Load settings from settings.json or create default."""
+        """Load settings from settings.json or create default, syncing Windows autostart."""
+        settings = AppSettings()
         if Config.SETTINGS_FILE.is_file():
             try:
                 with open(Config.SETTINGS_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    return AppSettings(**data)
-            except Exception:
-                pass
-        settings = AppSettings()
+                    settings = AppSettings(**data)
+            except Exception as e:
+                logger.warning(f"Failed to load settings: {e}")
+
+        # Sync autostart status from Windows registry
+        settings.start_with_windows = is_autostart_enabled()
+
         # Auto-detect Riot Client path if unset
-        detected = Config.find_riot_client_path()
-        if detected:
-            settings.riot_client_path = str(detected)
+        if not settings.riot_client_path:
+            detected = Config.find_riot_client_path()
+            if detected:
+                settings.riot_client_path = str(detected)
+
         self.save_settings(settings)
         return settings
 
     def save_settings(self, settings: AppSettings):
-        """Persist settings to settings.json."""
+        """Persist settings to settings.json atomically and sync autostart."""
         self.settings = settings
-        with open(Config.SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings.model_dump(), f, indent=2)
+        _write_json_atomic(Config.SETTINGS_FILE, settings.model_dump())
+        set_autostart(settings.start_with_windows)
+        logger.info("Application settings saved.")
 
     def get_accounts(self) -> List[AccountProfile]:
-        """Load all registered account profiles."""
+        """Load all registered account profiles with pinned accounts first."""
         accounts = []
         if not Config.PROFILES_DIR.exists():
             return accounts
@@ -67,8 +89,11 @@ class SessionManager:
                     except Exception:
                         continue
 
-        # Sort accounts: most recently used first
-        accounts.sort(key=lambda acc: acc.last_used or acc.created_at, reverse=True)
+        # Sort accounts: Pinned accounts on top, then most recently used
+        accounts.sort(
+            key=lambda acc: (1 if getattr(acc, "is_pinned", False) else 0, acc.last_used or acc.created_at),
+            reverse=True
+        )
         return accounts
 
     def get_account(self, account_id: str) -> Optional[AccountProfile]:
@@ -244,10 +269,9 @@ class SessionManager:
                     shutil.rmtree(dest_dir)
                 shutil.copytree(src_dir, dest_dir)
 
-        # 3. Save profile metadata
-        with open(profile_dir / "profile.json", "w", encoding="utf-8") as f:
-            json.dump(account.model_dump(), f, indent=2)
-
+        # 3. Save profile metadata atomically
+        _write_json_atomic(profile_dir / "profile.json", account.model_dump())
+        logger.info(f"Saved new account profile '{account.name}' ({account.id})")
         return account
 
     def update_account_session(self, account_id: str):
@@ -290,17 +314,82 @@ class SessionManager:
             account.sub_id = session_info.get("sub_id")
         if not account.username_hint and session_info.get("username_hint"):
             account.username_hint = session_info.get("username_hint")
-        with open(meta_file, "w", encoding="utf-8") as f:
-            json.dump(account.model_dump(), f, indent=2, ensure_ascii=False)
+        _write_json_atomic(meta_file, account.model_dump())
+        logger.info(f"Updated session tokens for '{account.name}' ({account.id})")
 
     def update_account_metadata(self, account: AccountProfile):
-        """Save updated account metadata (name, tag, color, preferred_game, notes)."""
+        """Save updated account metadata atomically (name, tag, color, notes, is_pinned)."""
         profile_dir = self.get_account_dir(account.id)
         if not profile_dir.is_dir():
             raise FileNotFoundError("Account profile not found.")
         meta_file = profile_dir / "profile.json"
-        with open(meta_file, "w", encoding="utf-8") as f:
-            json.dump(account.model_dump(), f, indent=2, ensure_ascii=False)
+        _write_json_atomic(meta_file, account.model_dump())
+
+    def toggle_pin_account(self, account_id: str) -> bool:
+        """Toggle pinned status for an account profile. Pinned accounts stay at the top."""
+        account = self.get_account(account_id)
+        if account:
+            account.is_pinned = not getattr(account, "is_pinned", False)
+            self.update_account_metadata(account)
+            logger.info(f"Toggled pin on account '{account.name}': {account.is_pinned}")
+            return account.is_pinned
+        return False
+
+    def export_accounts(self, target_zip: Path) -> int:
+        """
+        Export all saved accounts and settings to a portable ZIP archive.
+        Returns the number of accounts exported.
+        """
+        accounts = self.get_accounts()
+        target_zip.parent.mkdir(parents=True, exist_ok=True)
+        count = 0
+        with zipfile.ZipFile(target_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+            if Config.SETTINGS_FILE.is_file():
+                zf.write(Config.SETTINGS_FILE, arcname="settings.json")
+
+            for acc in accounts:
+                profile_dir = self.get_account_dir(acc.id)
+                if profile_dir.is_dir():
+                    count += 1
+                    for root, _, files in os.walk(profile_dir):
+                        for file in files:
+                            full_p = Path(root) / file
+                            rel_p = full_p.relative_to(Config.APP_DATA_DIR)
+                            zf.write(full_p, arcname=str(rel_p))
+
+        logger.info(f"Exported {count} accounts to {target_zip}")
+        return count
+
+    def import_accounts(self, source_zip: Path) -> int:
+        """
+        Import accounts from a ZIP archive backup.
+        Merges profiles cleanly without corrupting existing profiles.
+        Returns the number of profiles imported.
+        """
+        if not source_zip.is_file():
+            raise FileNotFoundError(f"Backup file not found: {source_zip}")
+
+        imported_count = 0
+        Config.ensure_directories()
+
+        with zipfile.ZipFile(source_zip, "r") as zf:
+            names = zf.namelist()
+            for name in names:
+                # Security check against path traversal
+                if ".." in name or name.startswith("/") or name.startswith("\\"):
+                    continue
+
+                if name.startswith("profiles/") and name.endswith("profile.json"):
+                    imported_count += 1
+
+                target_path = Config.APP_DATA_DIR / name
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(name) as src, open(target_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+
+        self.invalidate_session_cache()
+        logger.info(f"Imported {imported_count} accounts from {source_zip}")
+        return imported_count
 
     def switch_to_account(
         self,
@@ -310,9 +399,9 @@ class SessionManager:
     ) -> bool:
         """
         Switch to the specified account:
-        1. Close Riot processes cleanly
-        2. Replace active session files with the target account's session
-        3. Launch Riot Client or chosen game
+        1. Ensure Riot launcher is closed to release file locks
+        2. Safely swap session files with rollback protection
+        3. Launch official Riot Client cleanly (zero game tampering)
         """
         profile_dir = self.get_account_dir(account_id)
         files_dir = profile_dir / "files"
@@ -324,51 +413,91 @@ class SessionManager:
         with open(meta_file, "r", encoding="utf-8") as f:
             account = AccountProfile(**json.load(f))
 
-        # 1. Close all active Riot processes to unlock files
-        ProcessManager.close_all_riot_processes(timeout=4.0)
+        # 1. Close only Riot Client launcher if running
+        if ProcessManager.is_riot_running():
+            ProcessManager.close_riot_client_launcher(timeout=4.0)
 
-        # 2. Clear current session files in %LOCALAPPDATA%/Riot Games
-        for rel_file in Config.SESSION_FILES:
-            target = Config.RIOT_LOCAL_DIR / rel_file
-            if target.is_file():
-                try:
-                    target.unlink()
-                except OSError:
-                    pass
+        # 2. Stage current session into a temporary backup directory for rollback
+        backup_dir = Config.APP_DATA_DIR / ".session_swap_backup"
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
+        backup_dir.mkdir(parents=True, exist_ok=True)
 
-        for rel_dir in Config.SESSION_DIRS:
-            target_dir = Config.RIOT_LOCAL_DIR / rel_dir
-            if target_dir.is_dir():
-                try:
-                    shutil.rmtree(target_dir, ignore_errors=True)
-                except OSError:
-                    pass
+        try:
+            for rel_file in Config.SESSION_FILES:
+                src = Config.RIOT_LOCAL_DIR / rel_file
+                if src.is_file():
+                    dest = backup_dir / rel_file
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dest)
 
-        # 3. Restore target account's session files
-        for rel_file in Config.SESSION_FILES:
-            src_file = files_dir / rel_file
-            if src_file.is_file():
-                dest_file = Config.RIOT_LOCAL_DIR / rel_file
-                dest_file.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_file, dest_file)
+            for rel_dir in Config.SESSION_DIRS:
+                src_d = Config.RIOT_LOCAL_DIR / rel_dir
+                if src_d.is_dir():
+                    dest_d = backup_dir / rel_dir
+                    shutil.copytree(src_d, dest_d)
 
-        for rel_dir in Config.SESSION_DIRS:
-            src_dir = files_dir / rel_dir
-            if src_dir.is_dir():
-                dest_dir = Config.RIOT_LOCAL_DIR / rel_dir
-                dest_dir.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(src_dir, dest_dir)
+            # 3. Clear active session files in %LOCALAPPDATA%/Riot Games
+            for rel_file in Config.SESSION_FILES:
+                target = Config.RIOT_LOCAL_DIR / rel_file
+                if target.is_file():
+                    try:
+                        target.unlink()
+                    except OSError:
+                        pass
 
-        # 4. Update last_used timestamp & invalidate active cache
+            for rel_dir in Config.SESSION_DIRS:
+                target_dir = Config.RIOT_LOCAL_DIR / rel_dir
+                if target_dir.is_dir():
+                    try:
+                        shutil.rmtree(target_dir, ignore_errors=True)
+                    except OSError:
+                        pass
+
+            # 4. Restore target account's session files
+            for rel_file in Config.SESSION_FILES:
+                src_file = files_dir / rel_file
+                if src_file.is_file():
+                    dest_file = Config.RIOT_LOCAL_DIR / rel_file
+                    dest_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src_file, dest_file)
+
+            for rel_dir in Config.SESSION_DIRS:
+                src_dir = files_dir / rel_dir
+                if src_dir.is_dir():
+                    dest_dir = Config.RIOT_LOCAL_DIR / rel_dir
+                    dest_dir.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(src_dir, dest_dir)
+
+            # Swap succeeded: clean up temporary backup
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+        except Exception as swap_err:
+            # Rollback previous session files from backup
+            for rel_file in Config.SESSION_FILES:
+                bak_f = backup_dir / rel_file
+                if bak_f.is_file():
+                    dest_f = Config.RIOT_LOCAL_DIR / rel_file
+                    dest_f.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(bak_f, dest_f)
+            for rel_dir in Config.SESSION_DIRS:
+                bak_d = backup_dir / rel_dir
+                if bak_d.is_dir():
+                    dest_d = Config.RIOT_LOCAL_DIR / rel_dir
+                    dest_d.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(bak_d, dest_d)
+            shutil.rmtree(backup_dir, ignore_errors=True)
+            raise RuntimeError(f"Session swap failed and was safely rolled back: {swap_err}")
+
+        # 5. Update last_used timestamp & invalidate active cache
         account.mark_used()
         self.invalidate_session_cache()
         with open(meta_file, "w", encoding="utf-8") as f:
             json.dump(account.model_dump(), f, indent=2)
 
-        # 5. Launch Riot Client or Game if requested
+        # 6. Launch Riot Client cleanly if requested
         should_launch = auto_launch if auto_launch is not None else self.settings.auto_launch
         if should_launch:
-            product = launch_product or account.preferred_game or self.settings.default_game
             exe_path = Path(self.settings.riot_client_path or "")
             if not exe_path.is_file():
                 detected = Config.find_riot_client_path()
@@ -378,7 +507,7 @@ class SessionManager:
                     self.save_settings(self.settings)
 
             if exe_path.is_file():
-                ProcessManager.launch(exe_path, product=product)
+                ProcessManager.launch(exe_path, product="riot_client")
 
         return True
 

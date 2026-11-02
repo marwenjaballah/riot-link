@@ -15,11 +15,11 @@ from ...config import Config
 
 
 class AddAccountModal(ctk.CTkToplevel):
-    def __init__(self, parent, on_save: Callable[[str, str, str, str], None]):
+    def __init__(self, parent, on_save: Callable[[str, str, str, str, str], None]):
         super().__init__(parent)
         self.on_save = on_save
         self.title("Save Current Riot Account")
-        self.geometry("480x520")
+        self.geometry("480x510")
         self.resizable(False, False)
         self.configure(fg_color=Theme.BG_DARK)
         self.transient(parent)
@@ -28,7 +28,7 @@ class AddAccountModal(ctk.CTkToplevel):
         # Center on parent
         self.update_idletasks()
         px = parent.winfo_x() + (parent.winfo_width() - 480) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 520) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 510) // 2
         self.geometry(f"+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
@@ -55,7 +55,7 @@ class AddAccountModal(ctk.CTkToplevel):
         subtitle.pack(anchor="w", padx=24, pady=(0, 16))
 
         content = ctk.CTkFrame(self, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=24, pady=20)
+        content.pack(fill="both", expand=True, padx=24, pady=16)
 
         # Account Name Field
         ctk.CTkLabel(
@@ -68,14 +68,33 @@ class AddAccountModal(ctk.CTkToplevel):
         self.name_entry = ctk.CTkEntry(
             content,
             placeholder_text="e.g. Main (EUW), Smurf Ranked, Valorant Alt...",
-            height=38,
+            height=36,
             fg_color=Theme.SURFACE,
             border_color=Theme.CARD_BORDER,
             text_color=Theme.TEXT_PRIMARY,
             placeholder_text_color=Theme.TEXT_MUTED
         )
-        self.name_entry.pack(fill="x", pady=(0, 16))
+        self.name_entry.pack(fill="x", pady=(0, 12))
         self.name_entry.focus()
+
+        # Notes / Memo Field
+        ctk.CTkLabel(
+            content,
+            text="NOTES / REMINDER (OPTIONAL)",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w", pady=(0, 4))
+
+        self.notes_entry = ctk.CTkEntry(
+            content,
+            placeholder_text="e.g. Clash team, duo partner, ranked decay reminder...",
+            height=36,
+            fg_color=Theme.SURFACE,
+            border_color=Theme.CARD_BORDER,
+            text_color=Theme.TEXT_PRIMARY,
+            placeholder_text_color=Theme.TEXT_MUTED
+        )
+        self.notes_entry.pack(fill="x", pady=(0, 12))
 
         # Tag Field
         ctk.CTkLabel(
@@ -88,36 +107,13 @@ class AddAccountModal(ctk.CTkToplevel):
         self.tag_menu = ctk.CTkOptionMenu(
             content,
             values=Theme.TAG_OPTIONS,
-            height=36,
+            height=34,
             fg_color=Theme.SURFACE,
             button_color=Theme.SURFACE_HOVER,
             text_color=Theme.TEXT_PRIMARY
         )
         self.tag_menu.set("Main")
-        self.tag_menu.pack(fill="x", pady=(0, 16))
-
-        # Preferred Game to Launch
-        ctk.CTkLabel(
-            content,
-            text="DEFAULT GAME TO LAUNCH",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            text_color=Theme.TEXT_SECONDARY
-        ).pack(anchor="w", pady=(0, 4))
-
-        game_names = {k: v["name"] for k, v in Config.PRODUCTS.items()}
-        self.game_keys = list(Config.PRODUCTS.keys())
-        self.game_labels = list(game_names.values())
-
-        self.game_menu = ctk.CTkOptionMenu(
-            content,
-            values=self.game_labels,
-            height=36,
-            fg_color=Theme.SURFACE,
-            button_color=Theme.SURFACE_HOVER,
-            text_color=Theme.TEXT_PRIMARY
-        )
-        self.game_menu.set("League of Legends")
-        self.game_menu.pack(fill="x", pady=(0, 16))
+        self.tag_menu.pack(fill="x", pady=(0, 12))
 
         # Color Accent Choice
         ctk.CTkLabel(
@@ -128,7 +124,7 @@ class AddAccountModal(ctk.CTkToplevel):
         ).pack(anchor="w", pady=(0, 6))
 
         color_frame = ctk.CTkFrame(content, fg_color="transparent")
-        color_frame.pack(fill="x", pady=(0, 20))
+        color_frame.pack(fill="x", pady=(0, 16))
 
         self.selected_color = ctk.StringVar(value="#ff4655")
         for hex_code, label in Theme.AVATAR_COLORS:
@@ -148,7 +144,7 @@ class AddAccountModal(ctk.CTkToplevel):
 
         # Action Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=24, pady=(0, 20))
+        btn_frame.pack(fill="x", padx=24, pady=(0, 18))
 
         cancel_btn = ctk.CTkButton(
             btn_frame,
@@ -156,7 +152,7 @@ class AddAccountModal(ctk.CTkToplevel):
             fg_color=Theme.SURFACE,
             hover_color=Theme.SURFACE_HOVER,
             text_color=Theme.TEXT_SECONDARY,
-            height=40,
+            height=38,
             command=self.destroy
         )
         cancel_btn.pack(side="left", expand=True, fill="x", padx=(0, 8))
@@ -168,7 +164,7 @@ class AddAccountModal(ctk.CTkToplevel):
             hover_color=Theme.ACCENT_RED_HOVER,
             text_color="#ffffff",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            height=40,
+            height=38,
             command=self._handle_save
         )
         save_btn.pack(side="right", expand=True, fill="x", padx=(8, 0))
@@ -180,16 +176,10 @@ class AddAccountModal(ctk.CTkToplevel):
             return
 
         tag = self.tag_menu.get()
-        selected_game_label = self.game_menu.get()
-        game_key = "riot_client"
-        for k, v in Config.PRODUCTS.items():
-            if v["name"] == selected_game_label:
-                game_key = k
-                break
-
         color = self.selected_color.get()
+        notes = self.notes_entry.get().strip()
         self.destroy()
-        self.on_save(name, tag, color, game_key)
+        self.on_save(name, tag, color, "riot_client", notes)
 
 
 class EditAccountModal(ctk.CTkToplevel):
@@ -198,7 +188,7 @@ class EditAccountModal(ctk.CTkToplevel):
         self.account = account
         self.on_save = on_save
         self.title("Edit Account Profile")
-        self.geometry("480x520")
+        self.geometry("480x510")
         self.resizable(False, False)
         self.configure(fg_color=Theme.BG_DARK)
         self.transient(parent)
@@ -206,7 +196,7 @@ class EditAccountModal(ctk.CTkToplevel):
 
         self.update_idletasks()
         px = parent.winfo_x() + (parent.winfo_width() - 480) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 520) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 510) // 2
         self.geometry(f"+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
@@ -232,7 +222,7 @@ class EditAccountModal(ctk.CTkToplevel):
         subtitle.pack(anchor="w", padx=24, pady=(0, 16))
 
         content = ctk.CTkFrame(self, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=24, pady=20)
+        content.pack(fill="both", expand=True, padx=24, pady=16)
 
         # Account Name
         ctk.CTkLabel(
@@ -244,14 +234,35 @@ class EditAccountModal(ctk.CTkToplevel):
 
         self.name_entry = ctk.CTkEntry(
             content,
-            height=38,
+            height=36,
             fg_color=Theme.SURFACE,
             border_color=Theme.CARD_BORDER,
             text_color=Theme.TEXT_PRIMARY
         )
         self.name_entry.insert(0, self.account.name)
-        self.name_entry.pack(fill="x", pady=(0, 16))
+        self.name_entry.pack(fill="x", pady=(0, 12))
         self.name_entry.focus()
+
+        # Notes / Memo Field
+        ctk.CTkLabel(
+            content,
+            text="NOTES / REMINDER (OPTIONAL)",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w", pady=(0, 4))
+
+        self.notes_entry = ctk.CTkEntry(
+            content,
+            placeholder_text="e.g. Clash team, duo partner, ranked decay reminder...",
+            height=36,
+            fg_color=Theme.SURFACE,
+            border_color=Theme.CARD_BORDER,
+            text_color=Theme.TEXT_PRIMARY,
+            placeholder_text_color=Theme.TEXT_MUTED
+        )
+        if getattr(self.account, "notes", None):
+            self.notes_entry.insert(0, self.account.notes)
+        self.notes_entry.pack(fill="x", pady=(0, 12))
 
         # Tag
         ctk.CTkLabel(
@@ -264,35 +275,13 @@ class EditAccountModal(ctk.CTkToplevel):
         self.tag_menu = ctk.CTkOptionMenu(
             content,
             values=Theme.TAG_OPTIONS,
-            height=36,
+            height=34,
             fg_color=Theme.SURFACE,
             button_color=Theme.SURFACE_HOVER,
             text_color=Theme.TEXT_PRIMARY
         )
         self.tag_menu.set(self.account.tag if self.account.tag in Theme.TAG_OPTIONS else "Main")
-        self.tag_menu.pack(fill="x", pady=(0, 16))
-
-        # Preferred Game
-        ctk.CTkLabel(
-            content,
-            text="DEFAULT GAME TO LAUNCH",
-            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
-            text_color=Theme.TEXT_SECONDARY
-        ).pack(anchor="w", pady=(0, 4))
-
-        game_names = {k: v["name"] for k, v in Config.PRODUCTS.items()}
-        current_game_name = game_names.get(self.account.preferred_game, "Riot Client")
-
-        self.game_menu = ctk.CTkOptionMenu(
-            content,
-            values=list(game_names.values()),
-            height=36,
-            fg_color=Theme.SURFACE,
-            button_color=Theme.SURFACE_HOVER,
-            text_color=Theme.TEXT_PRIMARY
-        )
-        self.game_menu.set(current_game_name)
-        self.game_menu.pack(fill="x", pady=(0, 16))
+        self.tag_menu.pack(fill="x", pady=(0, 12))
 
         # Color Accent
         ctk.CTkLabel(
@@ -303,7 +292,7 @@ class EditAccountModal(ctk.CTkToplevel):
         ).pack(anchor="w", pady=(0, 6))
 
         color_frame = ctk.CTkFrame(content, fg_color="transparent")
-        color_frame.pack(fill="x", pady=(0, 20))
+        color_frame.pack(fill="x", pady=(0, 16))
 
         self.selected_color = ctk.StringVar(value=self.account.color or "#ff4655")
         for hex_code, label in Theme.AVATAR_COLORS:
@@ -323,7 +312,7 @@ class EditAccountModal(ctk.CTkToplevel):
 
         # Action Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=24, pady=(0, 20))
+        btn_frame.pack(fill="x", padx=24, pady=(0, 18))
 
         cancel_btn = ctk.CTkButton(
             btn_frame,
@@ -331,7 +320,7 @@ class EditAccountModal(ctk.CTkToplevel):
             fg_color=Theme.SURFACE,
             hover_color=Theme.SURFACE_HOVER,
             text_color=Theme.TEXT_SECONDARY,
-            height=40,
+            height=38,
             command=self.destroy
         )
         cancel_btn.pack(side="left", expand=True, fill="x", padx=(0, 8))
@@ -343,7 +332,7 @@ class EditAccountModal(ctk.CTkToplevel):
             hover_color=Theme.ACCENT_CYAN_HOVER,
             text_color="#000000",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            height=40,
+            height=38,
             command=self._handle_save
         )
         save_btn.pack(side="right", expand=True, fill="x", padx=(8, 0))
@@ -355,37 +344,40 @@ class EditAccountModal(ctk.CTkToplevel):
             return
 
         tag = self.tag_menu.get()
-        selected_game_label = self.game_menu.get()
-        game_key = "riot_client"
-        for k, v in Config.PRODUCTS.items():
-            if v["name"] == selected_game_label:
-                game_key = k
-                break
-
         self.account.name = name
         self.account.tag = tag
         self.account.color = self.selected_color.get()
-        self.account.preferred_game = game_key
+        self.account.notes = self.notes_entry.get().strip()
+        self.account.preferred_game = "riot_client"
 
         self.destroy()
         self.on_save(self.account)
 
 
 class SettingsModal(ctk.CTkToplevel):
-    def __init__(self, parent, settings: AppSettings, on_save: Callable[[AppSettings], None]):
+    def __init__(
+        self,
+        parent,
+        settings: AppSettings,
+        on_save: Callable[[AppSettings], None],
+        on_export: Optional[Callable[[], None]] = None,
+        on_import: Optional[Callable[[], None]] = None
+    ):
         super().__init__(parent)
         self.settings = settings
         self.on_save = on_save
+        self.on_export = on_export
+        self.on_import = on_import
         self.title("Application Settings")
-        self.geometry("520x420")
+        self.geometry("540x540")
         self.resizable(False, False)
         self.configure(fg_color=Theme.BG_DARK)
         self.transient(parent)
         self.grab_set()
 
         self.update_idletasks()
-        px = parent.winfo_x() + (parent.winfo_width() - 520) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 420) // 2
+        px = parent.winfo_x() + (parent.winfo_width() - 540) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 540) // 2
         self.geometry(f"+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
@@ -403,13 +395,13 @@ class SettingsModal(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             header,
-            text="Configure Riot Client executable location and launch behavior.",
+            text="Configure Riot Client executable, startup, and backups.",
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=Theme.TEXT_SECONDARY
         ).pack(anchor="w", padx=24, pady=(0, 16))
 
         content = ctk.CTkFrame(self, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=24, pady=20)
+        content.pack(fill="both", expand=True, padx=24, pady=16)
 
         # Riot Client Path
         ctk.CTkLabel(
@@ -420,7 +412,7 @@ class SettingsModal(ctk.CTkToplevel):
         ).pack(anchor="w", pady=(0, 4))
 
         path_row = ctk.CTkFrame(content, fg_color="transparent")
-        path_row.pack(fill="x", pady=(0, 16))
+        path_row.pack(fill="x", pady=(0, 12))
 
         self.path_entry = ctk.CTkEntry(
             path_row,
@@ -444,22 +436,101 @@ class SettingsModal(ctk.CTkToplevel):
         )
         browse_btn.pack(side="right")
 
-        # Auto Launch Checkbox
+        # Launch & System Settings
+        ctk.CTkLabel(
+            content,
+            text="BEHAVIOR & INTEGRATION",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w", pady=(4, 6))
+
         self.auto_launch_var = ctk.BooleanVar(value=self.settings.auto_launch)
         self.auto_launch_cb = ctk.CTkCheckBox(
             content,
-            text="Automatically launch game / client immediately after switching",
+            text="Automatically launch Riot Client immediately after switching",
             variable=self.auto_launch_var,
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=Theme.TEXT_PRIMARY,
             fg_color=Theme.ACCENT_CYAN,
             hover_color=Theme.ACCENT_CYAN_HOVER
         )
-        self.auto_launch_cb.pack(anchor="w", pady=(8, 16))
+        self.auto_launch_cb.pack(anchor="w", pady=(2, 6))
+
+        self.close_after_launch_var = ctk.BooleanVar(value=getattr(self.settings, "close_after_launch", False))
+        self.close_after_launch_cb = ctk.CTkCheckBox(
+            content,
+            text="Minimize Riot Link to system tray after launching Riot Client",
+            variable=self.close_after_launch_var,
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=Theme.TEXT_PRIMARY,
+            fg_color=Theme.ACCENT_CYAN,
+            hover_color=Theme.ACCENT_CYAN_HOVER
+        )
+        self.close_after_launch_cb.pack(anchor="w", pady=(2, 6))
+
+        self.start_with_windows_var = ctk.BooleanVar(value=getattr(self.settings, "start_with_windows", False))
+        self.start_with_windows_cb = ctk.CTkCheckBox(
+            content,
+            text="Start Riot Link automatically on Windows startup",
+            variable=self.start_with_windows_var,
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=Theme.TEXT_PRIMARY,
+            fg_color=Theme.ACCENT_CYAN,
+            hover_color=Theme.ACCENT_CYAN_HOVER
+        )
+        self.start_with_windows_cb.pack(anchor="w", pady=(2, 12))
+
+        # Backup & Restore Section
+        backup_card = ctk.CTkFrame(content, fg_color=Theme.SURFACE, corner_radius=8, border_width=1, border_color=Theme.CARD_BORDER)
+        backup_card.pack(fill="x", pady=(4, 8), padx=0)
+
+        backup_header = ctk.CTkFrame(backup_card, fg_color="transparent")
+        backup_header.pack(fill="x", padx=12, pady=(10, 4))
+
+        ctk.CTkLabel(
+            backup_header,
+            text="PORTABLE BACKUP & RESTORE",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            backup_header,
+            text="Export or restore your saved account profiles and settings as a portable .zip archive.",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=Theme.TEXT_MUTED
+        ).pack(anchor="w")
+
+        backup_btn_row = ctk.CTkFrame(backup_card, fg_color="transparent")
+        backup_btn_row.pack(fill="x", padx=12, pady=(6, 10))
+
+        export_btn = ctk.CTkButton(
+            backup_btn_row,
+            text="📦 Export Accounts (.zip)",
+            height=32,
+            fg_color=Theme.CARD_BG,
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.TEXT_PRIMARY,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=self._handle_export_click
+        )
+        export_btn.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        import_btn = ctk.CTkButton(
+            backup_btn_row,
+            text="📥 Import Accounts (.zip)",
+            height=32,
+            fg_color=Theme.CARD_BG,
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.TEXT_PRIMARY,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+            command=self._handle_import_click
+        )
+        import_btn.pack(side="right", fill="x", expand=True, padx=(6, 0))
 
         # Bottom buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=24, pady=(0, 20))
+        btn_frame.pack(fill="x", padx=24, pady=(0, 18))
 
         cancel_btn = ctk.CTkButton(
             btn_frame,
@@ -467,7 +538,7 @@ class SettingsModal(ctk.CTkToplevel):
             fg_color=Theme.SURFACE,
             hover_color=Theme.SURFACE_HOVER,
             text_color=Theme.TEXT_SECONDARY,
-            height=40,
+            height=38,
             command=self.destroy
         )
         cancel_btn.pack(side="left", expand=True, fill="x", padx=(0, 8))
@@ -479,7 +550,7 @@ class SettingsModal(ctk.CTkToplevel):
             hover_color=Theme.ACCENT_CYAN_HOVER,
             text_color="#000000",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            height=40,
+            height=38,
             command=self._handle_save
         )
         save_btn.pack(side="right", expand=True, fill="x", padx=(8, 0))
@@ -494,10 +565,20 @@ class SettingsModal(ctk.CTkToplevel):
             self.path_entry.delete(0, "end")
             self.path_entry.insert(0, file_path)
 
+    def _handle_export_click(self):
+        if self.on_export:
+            self.on_export()
+
+    def _handle_import_click(self):
+        if self.on_import:
+            self.on_import()
+
     def _handle_save(self):
         path_val = self.path_entry.get().strip()
         self.settings.riot_client_path = path_val or None
         self.settings.auto_launch = self.auto_launch_var.get()
+        self.settings.close_after_launch = self.close_after_launch_var.get()
+        self.settings.start_with_windows = self.start_with_windows_var.get()
         self.destroy()
         self.on_save(self.settings)
 
@@ -682,6 +763,150 @@ class RiotClientSetupModal(ctk.CTkToplevel):
         self.destroy()
 
 
+class WaitForRiotCloseModal(ctk.CTkToplevel):
+    """
+    Shown when switching accounts while Riot Client is still running.
+    Guides the user to cleanly close Riot Client from their Windows taskbar
+    or system tray. Automatically proceeds as soon as Riot Client closes!
+    Also provides a safe 'Close Launcher' button (only terminates RiotClientServices.exe, never games).
+    """
+    def __init__(self, parent, on_proceed: Callable[[], None], on_cancel: Optional[Callable[[], None]] = None):
+        super().__init__(parent)
+        self.parent = parent
+        self.on_proceed = on_proceed
+        self.on_cancel = on_cancel
+        self.title("Please Close Riot Client")
+        self.geometry("500x360")
+        self.resizable(False, False)
+        self.configure(fg_color=Theme.BG_DARK)
+        self.transient(parent)
+        self.grab_set()
+
+        self._check_timer = None
+        self._is_closing = False
+
+        self.update_idletasks()
+        px = parent.winfo_x() + (parent.winfo_width() - 500) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 360) // 2
+        self.geometry(f"+{max(0, px)}+{max(0, py)}")
+
+        self.protocol("WM_DELETE_WINDOW", self._handle_cancel)
+        self._build_ui()
+        self._check_loop()
+
+    def _build_ui(self):
+        header = ctk.CTkFrame(self, fg_color=Theme.SURFACE, corner_radius=0)
+        header.pack(fill="x", padx=0, pady=0)
+
+        ctk.CTkLabel(
+            header,
+            text="PLEASE EXIT RIOT CLIENT",
+            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            text_color=Theme.ACCENT_CYAN
+        ).pack(anchor="w", padx=24, pady=(16, 4))
+
+        ctk.CTkLabel(
+            header,
+            text="Riot Client must be closed to swap session files cleanly.",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=Theme.TEXT_SECONDARY
+        ).pack(anchor="w", padx=24, pady=(0, 16))
+
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=24, pady=16)
+
+        # Instructions card
+        card = ctk.CTkFrame(content, fg_color=Theme.SURFACE, corner_radius=8, border_width=1, border_color=Theme.CARD_BORDER)
+        card.pack(fill="x", pady=(0, 14))
+
+        ctk.CTkLabel(
+            card,
+            text="💡 Clean Exit from Taskbar / Tray (Recommended)",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=Theme.TEXT_PRIMARY
+        ).pack(anchor="w", padx=14, pady=(10, 4))
+
+        guide = (
+            "Right-click the Riot icon in your Windows Taskbar or System Tray\n"
+            "(near your clock) and click 'Exit'.\n\n"
+            "Riot Link will auto-detect the exit and proceed immediately!"
+        )
+        ctk.CTkLabel(
+            card,
+            text=guide,
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=Theme.TEXT_SECONDARY,
+            justify="left"
+        ).pack(anchor="w", padx=14, pady=(0, 12))
+
+        # Status label
+        self.status_lbl = ctk.CTkLabel(
+            content,
+            text="⏳ Waiting for Riot Client to close...",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color="#f59e0b"
+        )
+        self.status_lbl.pack(pady=(0, 10))
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=24, pady=(0, 18))
+
+        cancel_btn = ctk.CTkButton(
+            btn_frame,
+            text="Cancel",
+            fg_color=Theme.SURFACE,
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.TEXT_SECONDARY,
+            height=38,
+            command=self._handle_cancel
+        )
+        cancel_btn.pack(side="left", padx=(0, 8))
+
+        self.kill_btn = ctk.CTkButton(
+            btn_frame,
+            text="Close Launcher Now",
+            fg_color=Theme.SURFACE,
+            hover_color=Theme.SURFACE_HOVER,
+            text_color=Theme.ACCENT_RED,
+            border_width=1,
+            border_color=Theme.CARD_BORDER,
+            height=38,
+            command=self._handle_close_launcher_now
+        )
+        self.kill_btn.pack(side="right", expand=True, fill="x")
+
+    def _check_loop(self):
+        if self._is_closing:
+            return
+        from ...process_manager import ProcessManager
+        if not ProcessManager.is_riot_running():
+            self._on_client_closed()
+            return
+        self._check_timer = self.after(400, self._check_loop)
+
+    def _handle_close_launcher_now(self):
+        self.status_lbl.configure(text="⏳ Closing Riot Client launcher UI...", text_color="#f59e0b")
+        from ...process_manager import ProcessManager
+        ProcessManager.close_riot_client_launcher(timeout=3.0)
+
+    def _on_client_closed(self):
+        self._is_closing = True
+        if self._check_timer:
+            self.after_cancel(self._check_timer)
+        self.destroy()
+        if self.on_proceed:
+            self.on_proceed()
+
+    def _handle_cancel(self):
+        self._is_closing = True
+        if self._check_timer:
+            self.after_cancel(self._check_timer)
+        self.destroy()
+        if self.on_cancel:
+            self.on_cancel()
+
+
 class GuideModal(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
@@ -752,9 +977,11 @@ class GuideModal(ctk.CTkToplevel):
                 "4. Once on the home screen, click '+ SAVE CURRENT ACCOUNT'!"
             ),
             (
-                "⚡  1-Click Instant Switching & Direct Play",
-                "• Click 'SWITCH & PLAY' on any account card to switch instantly.\n"
-                "• Click the 'LoL' or 'VAL' buttons to jump straight into League of Legends or VALORANT on that account with 0 clicks!"
+                "⚡  1-Click Instant Switching",
+                "• Click 'SWITCH ACCOUNT' on any account card to switch instantly.\n"
+                "• Riot Link swaps your login session and opens the official Riot Client already logged in!\n"
+                "• From Riot Client, you simply click 'Play' on whatever game you want to play.\n"
+                "• Zero game command injection or memory access."
             ),
             (
                 "⚠️  Why You Should NEVER Click 'Sign Out' in Riot Client",
@@ -772,9 +999,9 @@ class GuideModal(ctk.CTkToplevel):
             ),
             (
                 "🛡️  Does It Touch the Game or Riot Vanguard?",
-                "No. This app never reads or writes game memory, never injects code, never modifies game files, and never interacts with Vanguard.\n\n"
-                "• It only swaps Riot's own local session files while the client is closed, then starts the official Riot Client.\n"
-                "• Riot Link is not endorsed by Riot Games. Riot can change its rules at any time, so use it at your own risk."
+                "No. This app NEVER touches game memory, never injects code, never modifies game files, never force-kills live game matches, and never interacts with Vanguard.\n\n"
+                "• It only swaps Riot Client's official 'Stay signed in' files while Riot Client is closed, then starts the official Riot Client via Windows.\n"
+                "• Live game processes are NEVER terminated by Riot Link."
             ),
             (
                 "🔒  Security & 2FA (Two-Factor Authentication)",
@@ -784,7 +1011,7 @@ class GuideModal(ctk.CTkToplevel):
             ),
             (
                 "🛠️  Account Card Controls",
-                "• ✏️ Edit: Change account nickname, tag label, avatar color, or default game.\n"
+                "• ✏️ Edit: Change account nickname, tag label, or avatar color.\n"
                 "• 🔄 Refresh: Re-link or renew token when Riot asks for a login update.\n"
                 "• 🗑️ Delete: Remove account profile from this app (this will NOT delete your real Riot account)."
             ),

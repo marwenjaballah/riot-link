@@ -12,7 +12,7 @@ import psutil
 
 class Config:
     APP_NAME = "Riot Link"
-    APP_VERSION = "0.1.4"
+    APP_VERSION = "0.1.5"
     APP_TAGLINE = "1-Click Account Switcher • 2FA Persistent • No Game Memory Access"
 
     # Branding & Repository
@@ -25,6 +25,7 @@ class Config:
     # Application data directory (in %APPDATA%/RiotLink)
     APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "RiotLink"
     PROFILES_DIR = APP_DATA_DIR / "profiles"
+    LOGS_DIR = APP_DATA_DIR / "logs"
     SETTINGS_FILE = APP_DATA_DIR / "settings.json"
 
     # Riot Local AppData Directories
@@ -50,48 +51,29 @@ class Config:
         Path("Riot Client/Data/Sessions"),
     ]
 
-    # Target Riot Process Names to manage
-    RIOT_PROCESS_NAMES = [
+    # Riot Client Launcher Process Names (Launcher UI only - NEVER game binaries!)
+    RIOT_CLIENT_PROCESSES = [
         "RiotClientServices.exe",
         "RiotClientUx.exe",
         "RiotClientUxRender.exe",
         "Riot Client.exe",
-        "LeagueClient.exe",
-        "LeagueClientUx.exe",
-        "LeagueClientUxRender.exe",
-        "League of Legends.exe",
-        "VALORANT.exe",
-        "VALORANT-Win64-Shipping.exe",
     ]
+    # Kept for backward compatibility
+    RIOT_PROCESS_NAMES = RIOT_CLIENT_PROCESSES
 
-    # Actual game processes (a match/game may be in progress if any of these run)
+    # Protected Game Processes - Monitored to ensure Riot Link NEVER touches them during a match
     GAME_PROCESS_NAMES = {
         "League of Legends.exe": "League of Legends",
         "VALORANT-Win64-Shipping.exe": "VALORANT",
         "VALORANT.exe": "VALORANT",
     }
 
-    # Product launch parameters
+    # Product launch parameters (Pure Riot Client launcher, zero game command-line tampering)
     PRODUCTS = {
         "riot_client": {
             "name": "Riot Client",
             "args": [],
             "icon": "riot",
-        },
-        "league_of_legends": {
-            "name": "League of Legends",
-            "args": ["--launch-product=league_of_legends", "--launch-patchline=live"],
-            "icon": "lol",
-        },
-        "valorant": {
-            "name": "VALORANT",
-            "args": ["--launch-product=valorant", "--launch-patchline=live"],
-            "icon": "valorant",
-        },
-        "teamfight_tactics": {
-            "name": "Teamfight Tactics",
-            "args": ["--launch-product=teamfight_tactics", "--launch-patchline=live"],
-            "icon": "tft",
         },
     }
 
@@ -107,6 +89,7 @@ class Config:
         """Ensure application directories exist."""
         cls.APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
         cls.PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+        cls.LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def find_riot_client_path(cls) -> Path | None:
@@ -123,10 +106,13 @@ class Config:
                 content = lockfile.read_text(encoding="utf-8", errors="ignore").strip()
                 parts = content.split(":")
                 if len(parts) >= 2 and parts[1].isdigit():
-                    proc = psutil.Process(int(parts[1]))
-                    exe = proc.exe()
-                    if exe and Path(exe).is_file():
-                        return Path(exe)
+                    pid = int(parts[1])
+                    if psutil.pid_exists(pid):
+                        proc = psutil.Process(pid)
+                        if any(proc.name().lower() == p.lower() for p in cls.RIOT_CLIENT_PROCESSES):
+                            exe = proc.exe()
+                            if exe and Path(exe).is_file():
+                                return Path(exe)
             except Exception:
                 pass
 

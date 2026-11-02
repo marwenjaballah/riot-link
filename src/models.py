@@ -19,6 +19,7 @@ class AccountProfile(BaseModel):
     last_used: str | None = None
     notes: str = ""
     needs_reauth: bool = False
+    is_pinned: bool = False
 
     def mark_used(self):
         self.last_used = datetime.now().isoformat()
@@ -29,4 +30,5 @@ class AppSettings(BaseModel):
     auto_launch: bool = True
     default_game: str = "riot_client"
     close_after_launch: bool = False
+    start_with_windows: bool = False
     theme_mode: str = "dark"

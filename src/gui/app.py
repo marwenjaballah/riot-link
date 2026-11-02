@@ -7,7 +7,7 @@ import webbrowser
 import threading
 from typing import Optional
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import customtkinter as ctk
 from PIL import Image
 
@@ -19,6 +19,7 @@ from .components.dialogs import (
     GuideModal,
     RiotClientSetupModal,
     UpdateModal,
+    WaitForRiotCloseModal,
 )
 from .components.account_card import AccountCard
 from ..session_manager import SessionManager
@@ -83,6 +84,11 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         # Periodic status check (every 3 seconds)
         self.after(3000, self._periodic_status_check)
+
+        # If launched with --minimized (e.g. from Windows autostart), start hidden in tray
+        import sys
+        if "--minimized" in sys.argv:
+            self.withdraw()
 
     def _load_window_icon(self):
         """Set window icon from assets if available."""
@@ -426,7 +432,8 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 on_switch=self._handle_switch,
                 on_edit=self._open_edit_modal,
                 on_update_token=self._handle_update_token,
-                on_delete=self._handle_delete
+                on_delete=self._handle_delete,
+                on_toggle_pin=self._handle_toggle_pin
             )
             card.pack(fill="x", pady=5)
 
@@ -503,18 +510,23 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         AddAccountModal(self, on_save=self._save_new_account)
 
-    def _save_new_account(self, name: str, tag: str, color: str, preferred_game: str):
+    def _save_new_account(self, name: str, tag: str, color: str, preferred_game: str, notes: str = ""):
         try:
             self.session_mgr.save_current_account(
                 name=name,
                 tag=tag,
                 color=color,
-                preferred_game=preferred_game
+                preferred_game=preferred_game,
+                notes=notes
             )
             self._refresh_ui()
             messagebox.showinfo("Saved!", f"Account profile '{name}' was saved successfully.", parent=self)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save account: {e}", parent=self)
+
+    def _handle_toggle_pin(self, account_id: str):
+        self.session_mgr.toggle_pin_account(account_id)
+        self._refresh_ui()
 
     def _open_edit_modal(self, account: AccountProfile):
         EditAccountModal(self, account=account, on_save=self._save_edited_account)
@@ -526,7 +538,30 @@ class RiotAccountSwitcherApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to update account: {e}", parent=self)
 
-    def _handle_switch(self, account_id: str, product: str):
+    def _check_running_game_block(self, action: str) -> bool:
+        """
+        If a live Riot game is running (League of Legends, VALORANT), strictly REFUSE
+        to switch accounts or kill processes. Riot Link NEVER force-closes games to protect
+        the user from anti-cheat flags, Vanguard exit logs, and in-game penalties.
+        """
+        games = ProcessManager.get_running_games()
+        if not games:
+            return True
+
+        if self.state() == "withdrawn":
+            self._restore_window()
+
+        game_list = " and ".join(games)
+        messagebox.showwarning(
+            "Live Game Detected",
+            f"⚠️ {game_list} is currently running on your PC!\n\n"
+            f"To protect your account, rank, and Vanguard anti-cheat status, Riot Link will NEVER force-close a live game to {action}.\n\n"
+            "Please finish or exit your game normally before switching accounts.",
+            parent=self
+        )
+        return False
+
+    def _handle_switch(self, account_id: str, product: str = "riot_client"):
         path_str = self.session_mgr.settings.riot_client_path
         if not path_str or not Path(path_str).is_file():
             detected = Config.find_riot_client_path()
@@ -536,6 +571,10 @@ class RiotAccountSwitcherApp(ctk.CTk):
             else:
                 RiotClientSetupModal(self, on_saved=self._on_riot_path_configured)
                 return
+
+        # 1. Strictly block if a live game is running (never kill game processes)
+        if not self._check_running_game_block("switch accounts"):
+            return
 
         account = self.session_mgr.get_account(account_id)
         if account and account.needs_reauth:
@@ -549,10 +588,19 @@ class RiotAccountSwitcherApp(ctk.CTk):
             if not confirm:
                 return
 
-        if not self._confirm_close_running_game("switch accounts"):
+        # 2. If Riot Client launcher is running, prompt user to close it cleanly from taskbar/tray
+        if ProcessManager.is_riot_running():
+            WaitForRiotCloseModal(
+                self,
+                on_proceed=lambda: self._execute_switch(account_id),
+                on_cancel=lambda: self._refresh_ui()
+            )
             return
 
-        # Immediate visual feedback
+        self._execute_switch(account_id)
+
+    def _execute_switch(self, account_id: str):
+        """Perform the session swap and launch the clean official Riot Client."""
         self.status_pill.configure(
             text=" ⏳ SWITCHING ACCOUNT... ",
             fg_color="#854d0e",
@@ -562,8 +610,10 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         def do_switch():
             try:
-                self.session_mgr.switch_to_account(account_id, launch_product=product, auto_launch=True)
+                self.session_mgr.switch_to_account(account_id, auto_launch=True)
                 self.after(0, self._refresh_ui)
+                if getattr(self.session_mgr.settings, "close_after_launch", False):
+                    self.after(400, self._on_close_to_tray)
             except Exception as e:
                 err_msg = str(e)
                 self.after(0, lambda: messagebox.showerror("Switch Error", f"Failed to switch account:\n{err_msg}", parent=self))
@@ -628,9 +678,13 @@ class RiotAccountSwitcherApp(ctk.CTk):
             "Open clean sign-in screen now?",
             parent=self
         )
-        if confirm:
-            if not self._confirm_close_running_game("open a clean sign-in screen"):
-                return
+        if not confirm:
+            return
+
+        if not self._check_running_game_block("open a clean sign-in screen"):
+            return
+
+        def do_prep():
             self._is_preparing_new_login = True
             self.status_pill.configure(
                 text=" ⏳ PREPARING SIGN-IN... ",
@@ -639,7 +693,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
             )
             self.update_idletasks()
 
-            def do_prep():
+            def run():
                 try:
                     self.session_mgr.prepare_new_login()
                     self.active_account_id = None
@@ -647,39 +701,19 @@ class RiotAccountSwitcherApp(ctk.CTk):
                     self._is_preparing_new_login = False
                     self.after(0, self._refresh_ui)
 
-            threading.Thread(target=do_prep, daemon=True).start()
+            threading.Thread(target=run, daemon=True).start()
 
-    def _confirm_close_running_game(self, action: str) -> bool:
-        """
-        If a Riot game is running (a match may be in progress), ask the user before
-        closing it. Returns True if it's OK to proceed. Defaults to 'No' so an
-        accidental Enter press never kills a live match.
-        """
-        games = ProcessManager.get_running_games()
-        if not games:
-            return True
-
-        if self.state() == "withdrawn":
-            self._restore_window()
-
-        game_list = " and ".join(games)
-        return messagebox.askyesno(
-            "Game Is Running",
-            f"{game_list} is currently running — a match may be in progress.\n\n"
-            f"To {action}, Riot Link has to close the game. Leaving a match early "
-            "can result in leaver penalties, LP loss, or queue restrictions.\n\n"
-            "Close the game anyway?",
-            icon="warning",
-            default="no",
-            parent=self
-        )
+        if ProcessManager.is_riot_running():
+            WaitForRiotCloseModal(self, on_proceed=do_prep)
+        else:
+            do_prep()
 
     def _handle_close_riot(self):
-        if not self._confirm_close_running_game("close Riot Client"):
+        if not self._check_running_game_block("close Riot Client"):
             return
 
         self.status_pill.configure(
-            text=" ⏳ CLOSING RIOT... ",
+            text=" ⏳ CLOSING RIOT LAUNCHER... ",
             fg_color="#854d0e",
             text_color="#fef08a"
         )
@@ -687,7 +721,7 @@ class RiotAccountSwitcherApp(ctk.CTk):
 
         def do_close():
             try:
-                closed = ProcessManager.close_all_riot_processes(timeout=4.0)
+                closed = ProcessManager.close_riot_client_launcher(timeout=4.0)
             except Exception:
                 closed = False
             self.after(0, self._refresh_ui)
@@ -787,7 +821,56 @@ class RiotAccountSwitcherApp(ctk.CTk):
         GuideModal(self)
 
     def _open_settings_modal(self):
-        SettingsModal(self, settings=self.session_mgr.settings, on_save=self._save_settings)
+        SettingsModal(
+            self,
+            settings=self.session_mgr.settings,
+            on_save=self._save_settings,
+            on_export=self._handle_export_backup,
+            on_import=self._handle_import_backup
+        )
+
+    def _handle_export_backup(self):
+        target = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export Riot Link Accounts Backup",
+            defaultextension=".zip",
+            filetypes=[("ZIP Archive", "*.zip")],
+            initialfile="riotlink_accounts_backup.zip"
+        )
+        if target:
+            try:
+                count = self.session_mgr.export_accounts(Path(target))
+                messagebox.showinfo(
+                    "Export Successful",
+                    f"Successfully exported {count} account profile(s) and settings to:\n{target}",
+                    parent=self
+                )
+            except Exception as e:
+                messagebox.showerror("Export Failed", f"Failed to export accounts backup:\n{e}", parent=self)
+
+    def _handle_import_backup(self):
+        source = filedialog.askopenfilename(
+            parent=self,
+            title="Import Riot Link Accounts Backup",
+            filetypes=[("ZIP Archive", "*.zip")]
+        )
+        if source:
+            confirm = messagebox.askyesno(
+                "Confirm Import",
+                "Importing accounts will merge saved profiles from the backup archive into Riot Link.\n\nContinue?",
+                parent=self
+            )
+            if confirm:
+                try:
+                    count = self.session_mgr.import_accounts(Path(source))
+                    self._refresh_ui()
+                    messagebox.showinfo(
+                        "Import Successful",
+                        f"Successfully imported {count} account profile(s) from backup!",
+                        parent=self
+                    )
+                except Exception as e:
+                    messagebox.showerror("Import Failed", f"Failed to import accounts backup:\n{e}", parent=self)
 
     def _save_settings(self, new_settings: AppSettings):
         self.session_mgr.save_settings(new_settings)

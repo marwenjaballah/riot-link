@@ -38,6 +38,10 @@ class SingleInstanceManager:
     def port_file(self) -> Path:
         return Config.APP_DATA_DIR / "app.port"
 
+    @property
+    def pid_file(self) -> Path:
+        return Config.APP_DATA_DIR / "app.pid"
+
     def is_already_running(self) -> bool:
         """
         Check if an instance is already running.
@@ -58,6 +62,11 @@ class SingleInstanceManager:
 
             # This process is the primary instance
             self._mutex_handle = handle
+            try:
+                with open(self.pid_file, "w", encoding="utf-8") as f:
+                    f.write(str(os.getpid()))
+            except Exception:
+                pass
             atexit.register(self.cleanup)
             return False
         except Exception:
@@ -93,13 +102,28 @@ class SingleInstanceManager:
         return False
 
     def _restore_fallback_win32(self):
-        """Fallback attempt to bring the window to front using Win32 API."""
+        """Fallback attempt to bring the window to front using Win32 API strictly for Riot Link process."""
+        target_pid = None
+        if self.pid_file.is_file():
+            try:
+                with open(self.pid_file, "r", encoding="utf-8") as f:
+                    c = f.read().strip()
+                    if c.isdigit():
+                        target_pid = int(c)
+            except Exception:
+                pass
+
         try:
             user32 = ctypes.windll.user32
-            # Find window by title starting with Config.APP_NAME
             title_prefix = Config.APP_NAME.lower()
 
             def enum_proc(hwnd, lparam):
+                if target_pid:
+                    proc_id = ctypes.c_ulong()
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(proc_id))
+                    if proc_id.value != target_pid:
+                        return True
+
                 length = user32.GetWindowTextLengthW(hwnd)
                 if length > 0:
                     buff = ctypes.create_unicode_buffer(length + 1)
@@ -166,10 +190,15 @@ class SingleInstanceManager:
         self._cleaned_up = True
         self._is_listener_running = False
 
-        # Remove port file
+        # Remove port and pid files
         try:
             if self.port_file.is_file():
                 self.port_file.unlink()
+        except Exception:
+            pass
+        try:
+            if self.pid_file.is_file():
+                self.pid_file.unlink()
         except Exception:
             pass
 

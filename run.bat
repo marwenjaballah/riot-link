@@ -1,9 +1,10 @@
 @echo off
-title Riot Link Launcher
 cd /d "%~dp0"
-python main.py
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo Riot Link exited with error code %ERRORLEVEL%.
-    pause
+where pythonw.exe >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    start "" pythonw main.py %*
+) else (
+    start "" python main.py %*
 )
+exit
+

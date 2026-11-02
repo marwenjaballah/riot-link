@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-0.1.4-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.1.5-blue.svg?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6.svg?style=for-the-badge)
 ![Game Memory](https://img.shields.io/badge/game%20memory-never%20touched-brightgreen.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-purple.svg?style=for-the-badge)
@@ -16,12 +16,11 @@
 
 ## ✨ Features
 
-* **⚡ 1-Click Instant Switching**: Click `SWITCH & PLAY` on any account and your game starts up already logged in.
-* **🛡️ No Injection or Memory Access**: Riot Link only copies Riot's own login files while the client is closed. It never touches the game process, game files, or Vanguard.
-* **⛔ Match Protection**: If a game is running, Riot Link asks before closing anything, so you don't accidentally leave a match.
+* **⚡ 1-Click Instant Switching**: Click `SWITCH ACCOUNT` on any profile and the official Riot Client boots up already logged in.
+* **🛡️ 100% Anti-Cheat & Vanguard Safe**: Riot Link never touches game memory, never injects code, never modifies game files, and **never force-terminates live games**. All games are launched and played through the official Riot Client.
+* **⛔ Live Match Protection**: If a game is running, Riot Link strictly blocks switching to ensure you never leave a match or trigger abnormal termination flags in Vanguard.
 * **🔒 Zero Plaintext Passwords**: Your passwords are never asked for, transmitted, or stored.
 * **📲 2FA Persistent**: Authenticate Two-Factor Authentication once—Riot remembers your PC and bypasses 2FA on subsequent switches.
-* **🎯 Direct Game Shortcuts**: Dedicated `LoL` and `VAL` buttons to jump straight into League of Legends or VALORANT.
 * **🔄 Intelligent Logout Detection**: If an account gets signed out in Riot Client, Riot Link detects it, alerts you, and provides a 1-click re-linking flow.
 * **🔄 Seamless In-App Updates**: Automatically checks GitHub Releases and performs a 1-click in-place update and restart. Every download is verified against the release's SHA256 checksum before installing.
 * **📥 Minimize to System Tray**: Keeps running quietly in your Windows notification tray on close (`X`), with a right-click menu to reopen, switch accounts, or exit.
@@ -75,8 +74,8 @@ python main.py
 3. Once logged in, click **`+ SAVE CURRENT ACCOUNT`** in Riot Link!
 
 ### 3️⃣ Switch and Play Anytime!
-* Click **`SWITCH & PLAY`** on any saved account card to switch and launch your game.
-* Or click the **`LoL`** or **`VAL`** buttons on the card to launch straight into League of Legends or VALORANT!
+* Click **`SWITCH ACCOUNT`** on any saved account card to switch.
+* The official Riot Client will open already logged into that account, ready for you to click Play on any game!
 
 ---
 

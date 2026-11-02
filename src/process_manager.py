@@ -1,10 +1,12 @@
 """
 Process Manager for detecting, gracefully closing, and launching Riot Client processes.
 Uses Riot's official lockfile and native Windows system tools (zero process memory scanning).
+NEVER interacts with or forcefully terminates live game processes (VALORANT, League of Legends).
 """
 
 import subprocess
 import time
+import os
 from pathlib import Path
 from typing import Optional, List
 import psutil
@@ -37,7 +39,8 @@ class ProcessManager:
     def is_riot_running(cls) -> bool:
         """
         Passive check: returns True if Riot Client's official lockfile exists and is active.
-        Zero system process enumeration, zero handle queries to game processes.
+        Verifies the PID actually belongs to Riot Client launcher (not a recycled OS PID).
+        Zero memory hooks, zero handle queries to protected game processes.
         """
         lockfile = Config.RIOT_CLIENT_CONFIG_DIR / "lockfile"
         if not lockfile.is_file():
@@ -46,39 +49,43 @@ class ProcessManager:
         pid = cls.get_riot_client_lockfile_pid()
         if pid:
             try:
-                # Check only this single specific PID
                 if psutil.pid_exists(pid):
-                    return True
+                    proc = psutil.Process(pid)
+                    proc_name = proc.name().lower()
+                    if any(proc_name == r.lower() for r in Config.RIOT_CLIENT_PROCESSES):
+                        return True
+                    else:
+                        # Stale lockfile whose PID was recycled by another program; clean up
+                        lockfile.unlink(missing_ok=True)
+                        return False
                 else:
-                    # Stale lockfile left from an unexpected crash; clean it up
+                    # Stale lockfile from previous crash; clean up
                     lockfile.unlink(missing_ok=True)
                     return False
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                return False
             except Exception:
-                return True
-        return True
+                return False
+        return False
 
     @staticmethod
     def get_running_games() -> List[str]:
         """
         Check if any Riot game match (League of Legends, VALORANT) is currently running.
-        Uses a single native Windows tasklist query (zero process handles opened from Python).
+        Uses pure-Python psutil process snapshot (zero console executables spawned).
         """
         found = []
-        CREATE_NO_WINDOW = 0x08000000
-
+        target_map = {exe.lower(): display for exe, display in Config.GAME_PROCESS_NAMES.items()}
         try:
-            res = subprocess.run(
-                ["tasklist", "/FO", "CSV", "/NH"],
-                capture_output=True,
-                text=True,
-                creationflags=CREATE_NO_WINDOW,
-                timeout=2.0,
-                check=False
-            )
-            output = (res.stdout or "").lower()
-            for exe_name, display_name in Config.GAME_PROCESS_NAMES.items():
-                if display_name not in found and exe_name.lower() in output:
-                    found.append(display_name)
+            for proc in psutil.process_iter(['name']):
+                try:
+                    pname = proc.info.get('name')
+                    if pname and pname.lower() in target_map:
+                        disp = target_map[pname.lower()]
+                        if disp not in found:
+                            found.append(disp)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
         except Exception:
             pass
 
@@ -86,42 +93,57 @@ class ProcessManager:
 
     @classmethod
     def close_all_riot_processes(cls, timeout: float = 4.0) -> bool:
-        """
-        Closes all running Riot processes using targeted Windows taskkill (by client name and PID).
-        Zero process scanning, zero memory hooks, 100% native Windows commands.
-        """
-        CREATE_NO_WINDOW = 0x08000000
+        """Alias for close_riot_client_launcher."""
+        return cls.close_riot_client_launcher(timeout=timeout)
 
-        # 1. If active lockfile has the PID, kill that exact process tree directly
+    @classmethod
+    def close_riot_client_launcher(cls, timeout: float = 4.0) -> bool:
+        """
+        Closes ONLY the Riot Client launcher UI processes (RiotClientServices.exe, RiotClientUx.exe).
+        NEVER terminates game processes (League of Legends, VALORANT).
+        Uses pure-Python psutil termination (zero console executables spawned).
+        """
+        launcher_names = {p.lower() for p in Config.RIOT_CLIENT_PROCESSES}
+        procs_to_terminate = []
+
+        # 1. Target lockfile PID if it belongs to Riot Client launcher
         lockfile_pid = cls.get_riot_client_lockfile_pid()
-        if lockfile_pid:
+        if lockfile_pid and psutil.pid_exists(lockfile_pid):
             try:
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(lockfile_pid)],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=CREATE_NO_WINDOW,
-                    check=False
-                )
-            except Exception:
+                proc = psutil.Process(lockfile_pid)
+                if proc.name().lower() in launcher_names:
+                    procs_to_terminate.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
-        # 2. Terminate Riot processes strictly by executable image name
-        for name in Config.RIOT_PROCESS_NAMES:
+        # 2. Find any other running Riot Client launcher processes
+        try:
+            for proc in psutil.process_iter(['name']):
+                try:
+                    pname = proc.info.get('name')
+                    if pname and pname.lower() in launcher_names:
+                        if proc not in procs_to_terminate:
+                            procs_to_terminate.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception:
+            pass
+
+        # Terminate gracefully first
+        for proc in procs_to_terminate:
             try:
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/IM", name],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=CREATE_NO_WINDOW,
-                    check=False
-                )
-            except Exception:
+                proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
-        time.sleep(0.4)
+        gone, alive = psutil.wait_procs(procs_to_terminate, timeout=min(2.0, timeout))
+        for proc in alive:
+            try:
+                proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        time.sleep(0.2)
 
         # 3. Clean up lockfile if it remains
         lockfile = Config.RIOT_CLIENT_CONFIG_DIR / "lockfile"
@@ -136,26 +158,21 @@ class ProcessManager:
     @classmethod
     def launch(cls, executable_path: Path, product: str = "riot_client") -> bool:
         """
-        Launch Riot Client or a specific game (League of Legends, Valorant, TFT).
+        Launch the official Riot Client cleanly.
         Uses Windows ShellExecute (os.startfile) so it is launched by Windows Explorer
         directly, completely independent of Riot Link (identical to double-clicking
-        an icon on your desktop).
+        the official Riot Client icon on your desktop).
+        Zero command-line game tampering.
         """
         if not executable_path.is_file():
             raise FileNotFoundError(f"RiotClientServices.exe not found at: {executable_path}")
 
-        prod_cfg = Config.PRODUCTS.get(product, Config.PRODUCTS["riot_client"])
-        args_list = prod_cfg.get("args", [])
-        args_str = " ".join(args_list)
-
-        import os
         try:
             # os.startfile triggers Win32 ShellExecuteW via Windows Explorer.
-            # To Windows, this is identical to a user double-clicking a desktop shortcut.
+            # To Windows and Vanguard, this is identical to a user double-clicking a desktop shortcut.
             os.startfile(
                 str(executable_path),
                 operation="open",
-                arguments=args_str,
                 cwd=str(executable_path.parent)
             )
             return True
@@ -167,7 +184,7 @@ class ProcessManager:
             flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
 
             subprocess.Popen(
-                [str(executable_path)] + args_list,
+                [str(executable_path)],
                 cwd=str(executable_path.parent),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
