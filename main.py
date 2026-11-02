@@ -26,15 +26,24 @@ from src.gui.app import RiotAccountSwitcherApp
 
 
 def cleanup_old_executable():
-    """Clean up any .exe.old file left behind after an in-place self-update."""
+    """Clean up any .exe.old, _new.tmp, or _silent_update.vbs files left behind after an update."""
     try:
         if getattr(sys, "frozen", False):
             exe_path = Path(sys.executable).resolve()
         else:
             exe_path = BASE_DIR / "dist" / "RiotLink.exe"
+
         old_exe = exe_path.with_suffix(".exe.old")
         if old_exe.is_file():
             old_exe.unlink(missing_ok=True)
+
+        tmp_exe = exe_path.parent / f"{exe_path.stem}_new.tmp"
+        if tmp_exe.is_file():
+            tmp_exe.unlink(missing_ok=True)
+
+        vbs_helper = exe_path.parent / "_silent_update.vbs"
+        if vbs_helper.is_file():
+            vbs_helper.unlink(missing_ok=True)
     except Exception:
         pass
 

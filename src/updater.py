@@ -196,94 +196,75 @@ class UpdateManager:
     @staticmethod
     def apply_update_and_restart(tmp_exe: Path, target_exe: Path):
         """
-        Seamlessly apply the update in-place without ANY command prompt (CMD) or console window.
-        1. Attempts instant in-place atomic rename.
-        2. If target_exe is locked by the running process, launches a completely hidden native
-           wscript.exe helper (Windows GUI subsystem - strictly ZERO console allocation) that
-           waits for this PID to exit, moves the binary into place, and starts the new version.
+        Seamlessly apply the update without ANY command prompt (CMD) or console window.
+        Spawns a completely hidden native wscript.exe helper (Windows GUI subsystem - strictly
+        ZERO console allocation) that waits for this PID to exit, cleanly swaps the binary into
+        place, launches the new version, and cleans up temporary files.
         """
+        current_pid = os.getpid()
         old_exe = target_exe.with_suffix(".exe.old")
-        if old_exe.is_file():
-            try:
-                old_exe.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-        renamed_directly = False
-        try:
-            # 1. Try direct in-place rename (succeeds on modern Windows NTFS)
-            if target_exe.is_file():
-                target_exe.rename(old_exe)
-            tmp_exe.rename(target_exe)
-            renamed_directly = True
-        except Exception:
-            renamed_directly = False
-
-        if renamed_directly:
-            # Successfully swapped directly in-place!
-            # Launch the new executable natively through Windows Shell (zero cmd prompt)
-            try:
-                os.startfile(str(target_exe))
-            except Exception:
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = 0  # SW_HIDE
-                subprocess.Popen(
-                    [str(target_exe)],
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    startupinfo=startupinfo,
-                    creationflags=0x08000000,  # CREATE_NO_WINDOW
-                    close_fds=True
-                )
-            os._exit(0)
-
-        # Fallback: Binary is locked by the OS loader while process is alive.
-        # Use wscript.exe (native Windows GUI subsystem - strictly ZERO cmd prompt window).
         vbs_path = target_exe.parent / "_silent_update.vbs"
+
         escaped_target = str(target_exe).replace('"', '""')
         escaped_old = str(old_exe).replace('"', '""')
         escaped_tmp = str(tmp_exe).replace('"', '""')
 
         vbs_code = f'''
-Dim fso, wsh
+Dim fso, wsh, wmi, procs
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set wsh = CreateObject("WScript.Shell")
 
-' Wait briefly for parent process to exit
-WScript.Sleep 600
+Dim targetPID, targetExe, oldExe, tmpExe
+targetPID = {current_pid}
+targetExe = "{escaped_target}"
+oldExe = "{escaped_old}"
+tmpExe = "{escaped_tmp}"
 
-Dim maxAttempts, success, i
-maxAttempts = 40
+' 1. Wait for parent PID to exit completely
+On Error Resume Next
+Set wmi = GetObject("winmgmts:\\\\.\\root\\cimv2")
+Do
+    Set procs = wmi.ExecQuery("Select ProcessId from Win32_Process Where ProcessId = " & targetPID)
+    If procs.Count = 0 Then Exit Do
+    WScript.Sleep 150
+Loop
+On Error GoTo 0
+
+' 2. Give the OS loader 250ms to release file locks
+WScript.Sleep 250
+
+' 3. Perform the swap
+Dim i, success
 success = False
-
-For i = 1 To maxAttempts
+For i = 1 To 30
     On Error Resume Next
-    If fso.FileExists("{escaped_old}") Then
-        fso.DeleteFile "{escaped_old}", True
+    If fso.FileExists(targetExe) Then
+        If fso.FileExists(oldExe) Then fso.DeleteFile oldExe, True
+        fso.MoveFile targetExe, oldExe
     End If
-    If fso.FileExists("{escaped_target}") Then
-        fso.MoveFile "{escaped_target}", "{escaped_old}"
+    If fso.FileExists(tmpExe) Then
+        fso.MoveFile tmpExe, targetExe
     End If
-    If fso.FileExists("{escaped_tmp}") Then
-        fso.MoveFile "{escaped_tmp}", "{escaped_target}"
-    End If
-    If Err.Number = 0 And fso.FileExists("{escaped_target}") Then
+    On Error GoTo 0
+
+    If fso.FileExists(targetExe) And Not fso.FileExists(tmpExe) Then
         success = True
         Exit For
     End If
-    Err.Clear
-    On Error GoTo 0
-    WScript.Sleep 350
+    WScript.Sleep 200
 Next
 
-' Launch updated application with 0 console window
-If success Then
-    wsh.Run Chr(34) & "{escaped_target}" & Chr(34), 1, False
+' 4. Clean up old binary
+On Error Resume Next
+If fso.FileExists(oldExe) Then fso.DeleteFile oldExe, True
+On Error GoTo 0
+
+' 5. Launch updated application (ZERO console window!)
+If success Or fso.FileExists(targetExe) Then
+    wsh.Run Chr(34) & targetExe & Chr(34), 1, False
 End If
 
-' Self-delete the temporary script
+' 6. Self-delete this script
 On Error Resume Next
 fso.DeleteFile WScript.ScriptFullName, True
 '''
