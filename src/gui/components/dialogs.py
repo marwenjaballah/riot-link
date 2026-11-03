@@ -1311,8 +1311,23 @@ class UpdateModal(ctk.CTkToplevel):
 
     def _on_download_complete(self):
         self.progress_bar.set(1.0)
-        self.progress_lbl.configure(text="✅ Update verified! Applying and restarting...", text_color="#10b981")
-        self.after(800, self._finish_restart)
+        self._countdown = 3
+        self._tick_countdown()
+
+    def _tick_countdown(self):
+        if self._countdown > 0:
+            self.progress_lbl.configure(
+                text=f"✅ Files verified! Finalizing and restarting in {self._countdown}s...",
+                text_color="#10b981"
+            )
+            self._countdown -= 1
+            self.after(1000, self._tick_countdown)
+        else:
+            self.progress_lbl.configure(
+                text="⚡ Applying update now...",
+                text_color=Theme.ACCENT_CYAN
+            )
+            self.after(300, self._finish_restart)
 
     def _finish_restart(self):
         from ...updater import UpdateManager

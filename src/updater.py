@@ -241,8 +241,8 @@ Do
     If waitCount > 40 Then Exit Do
 Loop
 
-' 2. Give the OS loader 250ms to release file locks
-WScript.Sleep 250
+' 2. Give the OS loader and filesystem 400ms to release file locks
+WScript.Sleep 400
 
 ' 3. Perform the swap
 Dim i, success
@@ -270,7 +270,11 @@ On Error Resume Next
 If fso.FileExists(oldExe) Then fso.DeleteFile oldExe, True
 On Error GoTo 0
 
-' 5. Clean PyInstaller environment variables so new process extracts its own DLLs cleanly
+' 5. File readiness buffer timer: wait 1.5 seconds so filesystem caches flush
+' and antivirus/SmartScreen scans complete before reopening
+WScript.Sleep 1500
+
+' 6. Clean PyInstaller environment variables so new process extracts its own DLLs cleanly
 On Error Resume Next
 Dim procEnv
 Set procEnv = wsh.Environment("Process")
@@ -280,12 +284,12 @@ procEnv.Remove("PYI_STATIC_ZLIB")
 wsh.CurrentDirectory = fso.GetParentFolderName(targetExe)
 On Error GoTo 0
 
-' 6. Launch updated application (ZERO console window!)
+' 7. Launch updated application (ZERO console window!)
 If success Or fso.FileExists(targetExe) Then
     wsh.Run Chr(34) & targetExe & Chr(34), 1, False
 End If
 
-' 7. Self-delete this script
+' 8. Self-delete this script
 On Error Resume Next
 fso.DeleteFile WScript.ScriptFullName, True
 '''
