@@ -40,15 +40,15 @@ class Theme:
     ]
 
     # Pre-set tags
-    TAG_OPTIONS = ["Main", "Smurf", "Ranked", "Casual", "Tournament", "Shared", "Alt"]
+    TAG_OPTIONS = ["Main", "Alt", "Ranked", "Practice", "Casual", "Tournament", "Shared"]
 
     # Tag styling (text_color, bg_color)
     TAG_STYLES = {
         "Main": ("#dfb04d", "#2d2415"),
-        "Smurf": ("#a78bfa", "#261d3b"),
+        "Alt": ("#94a3b8", "#1e293b"),
         "Ranked": ("#ff6b78", "#38181f"),
+        "Practice": ("#a78bfa", "#261d3b"),
         "Casual": ("#2dd4bf", "#112e30"),
         "Tournament": ("#fbbf24", "#362610"),
         "Shared": ("#60a5fa", "#152438"),
-        "Alt": ("#94a3b8", "#1e293b"),
     }

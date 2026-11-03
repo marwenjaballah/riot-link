@@ -67,7 +67,7 @@ class AddAccountModal(ctk.CTkToplevel):
 
         self.name_entry = ctk.CTkEntry(
             content,
-            placeholder_text="e.g. Main (EUW), Smurf Ranked, Valorant Alt...",
+            placeholder_text="e.g. Main (EUW), Practice Ranked, Valorant Alt...",
             height=36,
             fg_color=Theme.SURFACE,
             border_color=Theme.CARD_BORDER,
@@ -1054,10 +1054,10 @@ class GuideModal(ctk.CTkToplevel):
                 "• Live game processes are NEVER terminated by Riot Link."
             ),
             (
-                "🔒  Security & 2FA (Two-Factor Authentication)",
+                "🔒  Security & Session Authorization",
                 "• No Passwords Stored: This app NEVER asks for or stores your Riot password.\n"
-                "• Local Storage Only: Session tokens are stored only on your PC in %APPDATA%. Treat that folder like a password — don't share it.\n"
-                "• 2FA Persistence: You only enter 2FA once when saving the account. Riot's servers remember your PC, so switching accounts skips 2FA prompts automatically!"
+                "• Local Storage Only: Session tokens are stored strictly on your PC in %APPDATA%.\n"
+                "• Session Persistence: By checking 'Stay signed in' in the official Riot Client, Riot authorizes this PC so you do not need to re-login on every switch."
             ),
             (
                 "🛠️  Account Card Controls",
