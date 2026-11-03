@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-0.1.7-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.1.8-blue.svg?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6.svg?style=for-the-badge)
 ![Game Memory](https://img.shields.io/badge/game%20memory-never%20touched-brightgreen.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-purple.svg?style=for-the-badge)
@@ -25,6 +25,7 @@
 * **🔄 Seamless In-App Updates**: Automatically checks GitHub Releases and performs a 1-click in-place update and restart. Every download is verified against the release's SHA256 checksum before installing.
 * **📥 Minimize to System Tray**: Keeps running quietly in your Windows notification tray on close (`X`), with a right-click menu to reopen, switch accounts, or exit.
 * **🎮 Profile Customization**: Organize accounts with tags (`Main`, `Smurf`, `Ranked`, `Casual`) and custom accent colors.
+* **📦 Portable Backup & Restore**: Export and restore your saved accounts as a portable `.zip` when migrating to a new PC or reinstalling Windows. *(Personal use only — sharing backups with others violates Riot Games' Terms of Service).*
 * **💻 Standalone Executable**: Portable single `.exe` with zero installation required.
 
 ---

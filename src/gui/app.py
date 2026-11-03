@@ -830,6 +830,18 @@ class RiotAccountSwitcherApp(ctk.CTk):
         )
 
     def _handle_export_backup(self):
+        proceed = messagebox.askokcancel(
+            "Export Accounts — Security & Rules Notice",
+            "⚠️ IMPORTANT: RIOT RULES & ACCOUNT SECURITY\n\n"
+            "• This backup contains your personal Riot Client login session tokens.\n"
+            "• FOR PERSONAL USE ONLY: Intended for personal PC migrations or Windows re-installs.\n"
+            "• NEVER SHARE THIS FILE: Sending backup files to others violates Riot Games Terms of Service (Account Sharing) and risks account suspension.\n\n"
+            "Do you wish to proceed with creating your personal backup?",
+            parent=self
+        )
+        if not proceed:
+            return
+
         target = filedialog.asksaveasfilename(
             parent=self,
             title="Export Riot Link Accounts Backup",
@@ -842,7 +854,8 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 count = self.session_mgr.export_accounts(Path(target))
                 messagebox.showinfo(
                     "Export Successful",
-                    f"Successfully exported {count} account profile(s) and settings to:\n{target}",
+                    f"Successfully exported {count} account profile(s) and settings to:\n{target}\n\n"
+                    "🔒 Reminder: Keep this file private and secure on your personal device.",
                     parent=self
                 )
             except Exception as e:
@@ -856,8 +869,10 @@ class RiotAccountSwitcherApp(ctk.CTk):
         )
         if source:
             confirm = messagebox.askyesno(
-                "Confirm Import",
-                "Importing accounts will merge saved profiles from the backup archive into Riot Link.\n\nContinue?",
+                "Confirm Import — Personal Accounts Only",
+                "Importing accounts will merge saved profiles from this backup archive into Riot Link.\n\n"
+                "⚠️ Riot Rules Reminder: Only import backups created from your own accounts. Importing third-party accounts violates Riot Games account sharing policies.\n\n"
+                "Continue?",
                 parent=self
             )
             if confirm:

@@ -369,7 +369,7 @@ class SettingsModal(ctk.CTkToplevel):
         self.on_export = on_export
         self.on_import = on_import
         self.title("Application Settings")
-        self.geometry("540x570")
+        self.geometry("540x630")
         self.resizable(False, False)
         self.configure(fg_color=Theme.BG_DARK)
         self.transient(parent)
@@ -377,7 +377,7 @@ class SettingsModal(ctk.CTkToplevel):
 
         self.update_idletasks()
         px = parent.winfo_x() + (parent.winfo_width() - 540) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 570) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - 630) // 2
         self.geometry(f"+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
@@ -516,8 +516,29 @@ class SettingsModal(ctk.CTkToplevel):
             text_color=Theme.TEXT_MUTED
         ).pack(anchor="w")
 
+        # Riot Rules & Security Compliance Banner
+        rules_banner = ctk.CTkFrame(
+            backup_card,
+            fg_color="#231b0b",
+            corner_radius=6,
+            border_width=1,
+            border_color="#78350f"
+        )
+        rules_banner.pack(fill="x", padx=12, pady=(2, 6))
+
+        ctk.CTkLabel(
+            rules_banner,
+            text="⚖️ RIOT RULES & PERSONAL USE NOTICE:\n"
+                 "• Backups are strictly for personal use (e.g. PC migration or format).\n"
+                 "• NEVER share backup files. Distributing login tokens violates Riot Games'\n"
+                 "  Terms of Service (Account Sharing) and risks account suspension.",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color="#fcd34d",
+            justify="left"
+        ).pack(anchor="w", padx=10, pady=6)
+
         backup_btn_row = ctk.CTkFrame(backup_card, fg_color="transparent")
-        backup_btn_row.pack(fill="x", padx=12, pady=(6, 10))
+        backup_btn_row.pack(fill="x", padx=12, pady=(2, 10))
 
         export_btn = ctk.CTkButton(
             backup_btn_row,
