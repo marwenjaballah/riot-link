@@ -284,9 +284,24 @@ procEnv.Remove("PYI_STATIC_ZLIB")
 wsh.CurrentDirectory = fso.GetParentFolderName(targetExe)
 On Error GoTo 0
 
-' 7. Launch updated application (ZERO console window!)
+' 7. Launch updated application via Windows Explorer (ShellExecute)
+' Spawning through Explorer guarantees a pristine desktop user environment
+' completely isolated from wscript or any parent PyInstaller temporary variables.
 If success Or fso.FileExists(targetExe) Then
-    wsh.Run Chr(34) & targetExe & Chr(34), 1, False
+    Dim targetDir, shellApp, launched
+    targetDir = fso.GetParentFolderName(targetExe)
+    launched = False
+    On Error Resume Next
+    Set shellApp = CreateObject("Shell.Application")
+    shellApp.ShellExecute targetExe, "", targetDir, "open", 1
+    If Err.Number = 0 Then launched = True
+    On Error GoTo 0
+
+    ' Fallback to wsh.Run if ShellExecute is unavailable
+    If Not launched Then
+        wsh.CurrentDirectory = targetDir
+        wsh.Run Chr(34) & targetExe & Chr(34), 1, False
+    End If
 End If
 
 ' 8. Self-delete this script

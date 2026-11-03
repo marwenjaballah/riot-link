@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-0.1.9-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.2.0-blue.svg?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6.svg?style=for-the-badge)
 ![Safety](https://img.shields.io/badge/game%20memory-never%20touched-brightgreen.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-purple.svg?style=for-the-badge)
@@ -12,7 +12,7 @@
 
 <br/>
 
-[![Download Latest Release](https://img.shields.io/badge/Download-RiotLink.exe%20(v0.1.9)-00d2d3?style=for-the-badge&logo=windows&logoColor=black)](https://github.com/marwenjaballah/riot-link/releases/latest/download/RiotLink.exe)
+[![Download Latest Release](https://img.shields.io/badge/Download-RiotLink.exe%20(v0.2.0)-00d2d3?style=for-the-badge&logo=windows&logoColor=black)](https://github.com/marwenjaballah/riot-link/releases/latest/download/RiotLink.exe)
 [![View All Releases](https://img.shields.io/badge/GitHub-All%20Releases-334155?style=for-the-badge&logo=github)](https://github.com/marwenjaballah/riot-link/releases)
 
 <br/><br/>
@@ -55,8 +55,8 @@ If you play Riot games across multiple accounts—such as maintaining separate a
 ### Option A: Standalone Executable (Recommended)
 
 1. Download the latest executable directly:
-   * **[Download RiotLink.exe (v0.1.9)](https://github.com/marwenjaballah/riot-link/releases/latest/download/RiotLink.exe)**
-   * Or download the full ZIP archive: **[RiotLink-v0.1.9-windows-x64.zip](https://github.com/marwenjaballah/riot-link/releases/latest/download/RiotLink-v0.1.9-windows-x64.zip)**
+   * **[Download RiotLink.exe (v0.2.0)](https://github.com/marwenjaballah/riot-link/releases/latest/download/RiotLink.exe)**
+   * Or download the full ZIP archive: **[RiotLink-v0.2.0-windows-x64.zip](https://github.com/marwenjaballah/riot-link/releases/latest/download/RiotLink-v0.2.0-windows-x64.zip)**
 2. Place `RiotLink.exe` in any folder of your choice (e.g. `C:\Games\RiotLink\` or Desktop).
 3. Run `RiotLink.exe`! No installer needed.
 
