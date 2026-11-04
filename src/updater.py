@@ -322,6 +322,15 @@ fso.DeleteFile WScript.ScriptFullName, True
             # Strip PyInstaller runtime variables from child process environment
             # so the new executable does not attempt to load Python DLLs from the
             # old instance's deleted _MEI temporary folder.
+            # Explicitly unset from Win32 process environment block
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetEnvironmentVariableW("_MEIPASS2", None)
+                ctypes.windll.kernel32.SetEnvironmentVariableW("_MEIPASS", None)
+                ctypes.windll.kernel32.SetEnvironmentVariableW("PYI_STATIC_ZLIB", None)
+            except Exception:
+                pass
+
             clean_env = dict(os.environ)
             clean_env.pop("_MEIPASS2", None)
             clean_env.pop("_MEIPASS", None)

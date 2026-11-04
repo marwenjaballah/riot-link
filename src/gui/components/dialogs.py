@@ -183,12 +183,22 @@ class AddAccountModal(ctk.CTkToplevel):
 
 
 class EditAccountModal(ctk.CTkToplevel):
-    def __init__(self, parent, account: AccountProfile, on_save: Callable[[AccountProfile], None]):
+    def __init__(
+        self,
+        parent,
+        account: AccountProfile,
+        on_save: Callable[[AccountProfile], None],
+        is_active: bool = False,
+        on_reimport: Optional[Callable[[], None]] = None
+    ):
         super().__init__(parent)
         self.account = account
         self.on_save = on_save
+        self.is_active = is_active
+        self.on_reimport = on_reimport
         self.title("Edit Account Profile")
-        self.geometry("480x510")
+        win_h = 600 if (self.is_active and self.on_reimport) else 510
+        self.geometry(f"480x{win_h}")
         self.resizable(False, False)
         self.configure(fg_color=Theme.BG_DARK)
         self.transient(parent)
@@ -196,7 +206,7 @@ class EditAccountModal(ctk.CTkToplevel):
 
         self.update_idletasks()
         px = parent.winfo_x() + (parent.winfo_width() - 480) // 2
-        py = parent.winfo_y() + (parent.winfo_height() - 510) // 2
+        py = parent.winfo_y() + (parent.winfo_height() - win_h) // 2
         self.geometry(f"+{max(0, px)}+{max(0, py)}")
 
         self._build_ui()
@@ -310,6 +320,41 @@ class EditAccountModal(ctk.CTkToplevel):
             )
             rb.pack(side="left", padx=4)
 
+        # Active Account Re-import option
+        if self.is_active and self.on_reimport:
+            reimport_box = ctk.CTkFrame(content, fg_color=Theme.SURFACE, corner_radius=8, border_width=1, border_color="#059669")
+            reimport_box.pack(fill="x", pady=(0, 14))
+
+            reimport_inner = ctk.CTkFrame(reimport_box, fg_color="transparent")
+            reimport_inner.pack(fill="x", padx=12, pady=10)
+
+            ctk.CTkLabel(
+                reimport_inner,
+                text="ACTIVE ACCOUNT SETTINGS",
+                font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+                text_color="#34d399"
+            ).pack(anchor="w")
+
+            ctk.CTkLabel(
+                reimport_inner,
+                text="Snapshot the latest Riot Client configurations, game settings, and credentials into this profile.",
+                font=ctk.CTkFont(family="Segoe UI", size=11),
+                text_color=Theme.TEXT_SECONDARY,
+                wraplength=380,
+                justify="left"
+            ).pack(anchor="w", pady=(2, 8))
+
+            ctk.CTkButton(
+                reimport_inner,
+                text="🔄 Re-import Current Riot Settings",
+                font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
+                height=32,
+                fg_color="#065f46",
+                hover_color="#047857",
+                text_color="#ffffff",
+                command=self._handle_reimport_click
+            ).pack(fill="x")
+
         # Action Buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=24, pady=(0, 18))
@@ -352,6 +397,11 @@ class EditAccountModal(ctk.CTkToplevel):
 
         self.destroy()
         self.on_save(self.account)
+
+    def _handle_reimport_click(self):
+        if self.on_reimport:
+            self.destroy()
+            self.on_reimport()
 
 
 class SettingsModal(ctk.CTkToplevel):

@@ -329,20 +329,26 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self._last_has_session = has_session
         is_running = ProcessManager.is_riot_running()
 
-        # Update Save Button: Only active when an unsaved account is currently logged in!
+        # Update Save / Re-import Button
         if not has_session:
             self.add_btn.configure(
                 state="disabled",
                 text="+ SAVE CURRENT ACCOUNT",
                 fg_color=Theme.CARD_BG,
-                text_color=Theme.TEXT_MUTED
+                text_color=Theme.TEXT_MUTED,
+                command=self._open_add_modal
             )
         elif self.active_account_id is not None:
+            accounts = self.session_mgr.get_accounts()
+            active_acc = next((a for a in accounts if a.id == self.active_account_id), None)
+            name_label = f" ({active_acc.name.upper()})" if active_acc else ""
             self.add_btn.configure(
-                state="disabled",
-                text="✓ CURRENT ACCOUNT SAVED",
-                fg_color=Theme.CARD_BG,
-                text_color=Theme.TEXT_MUTED
+                state="normal",
+                text=f"🔄 UPDATE SETTINGS{name_label}",
+                fg_color=Theme.SURFACE,
+                hover_color=Theme.SURFACE_HOVER,
+                text_color=Theme.ACCENT_CYAN,
+                command=self._handle_reimport_active_settings
             )
         else:
             self.add_btn.configure(
@@ -350,7 +356,8 @@ class RiotAccountSwitcherApp(ctk.CTk):
                 text="+ SAVE CURRENT ACCOUNT",
                 fg_color=Theme.ACCENT_RED,
                 hover_color=Theme.ACCENT_RED_HOVER,
-                text_color="#ffffff"
+                text_color="#ffffff",
+                command=self._open_add_modal
             )
 
         # Update Status Pill
@@ -529,7 +536,21 @@ class RiotAccountSwitcherApp(ctk.CTk):
         self._refresh_ui()
 
     def _open_edit_modal(self, account: AccountProfile):
-        EditAccountModal(self, account=account, on_save=self._save_edited_account)
+        is_active = (account.id == self.active_account_id and not account.needs_reauth)
+        EditAccountModal(
+            self,
+            account=account,
+            on_save=self._save_edited_account,
+            is_active=is_active,
+            on_reimport=(lambda: self._handle_reimport_active_settings()) if is_active else None
+        )
+
+    def _handle_reimport_active_settings(self):
+        """1-Click trigger to re-import and snapshot the active Riot session & client settings."""
+        if self.active_account_id is None:
+            messagebox.showinfo("No Active Account", "No account is currently detected as active.", parent=self)
+            return
+        self._handle_update_token(self.active_account_id)
 
     def _save_edited_account(self, updated_account: AccountProfile):
         try:
@@ -628,34 +649,56 @@ class RiotAccountSwitcherApp(ctk.CTk):
         if not self.session_mgr.has_active_riot_session():
             messagebox.showwarning(
                 "Riot Client Not Logged In",
-                f"Cannot refresh or re-link '{acc_name}' because Riot Client is currently at the sign-in screen (no active session).\n\n"
-                "To re-link:\n"
+                f"Cannot refresh or update settings for '{acc_name}' because Riot Client is currently at the sign-in screen (no active session).\n\n"
+                "To update settings:\n"
                 "1. Open Riot Client and sign into this account (ensure 'Stay signed in' is checked).\n"
-                "2. Complete 2FA (if prompted).\n"
-                "3. Once you reach the home screen, click 🔄 (Refresh) again!",
+                "2. Configure your desired client or in-game preferences.\n"
+                "3. Once logged in, click 🔄 again to snapshot the latest settings!",
                 parent=self
             )
             return
 
+        is_active = (target_acc and target_acc.id == self.active_account_id and not target_acc.needs_reauth)
         current_hint = self.session_mgr.extract_session_username_hint()
-        confirm = messagebox.askyesno(
-            "Re-Link Session Token",
-            f"This will capture the session currently active in Riot Client and assign it to '{acc_name}'.\n\n"
-            f"Active Session Detected: {current_hint or 'Riot Session'}\n\n"
-            "This will clear the [LOGGED OUT] status and restore 1-click auto-login.\n\nContinue?",
-            parent=self
-        )
+
+        if is_active:
+            confirm = messagebox.askyesno(
+                "Update Account Settings",
+                f"Re-import & snapshot Riot Games settings for '{acc_name}'?\n\n"
+                f"Active Account Detected: {current_hint or acc_name}\n\n"
+                "This will snapshot the latest Riot Client configurations, game settings (League, Valorant, TFT), "
+                "and session tokens currently on this PC into your saved profile.\n\n"
+                "Continue?",
+                parent=self
+            )
+        else:
+            confirm = messagebox.askyesno(
+                "Re-Link Session Token",
+                f"This will capture the session currently active in Riot Client and assign it to '{acc_name}'.\n\n"
+                f"Active Session Detected: {current_hint or 'Riot Session'}\n\n"
+                "This will clear the [LOGGED OUT] status and restore 1-click auto-login.\n\nContinue?",
+                parent=self
+            )
+
         if confirm:
             try:
                 self.session_mgr.update_account_session(account_id)
                 self.session_mgr.mark_account_reauth(account_id, False)
                 self._refresh_ui()
-                messagebox.showinfo(
-                    "Re-Linked Successfully!",
-                    f"Session for '{acc_name}' has been restored and updated successfully!\n"
-                    "You can now switch to this account with 1 click.",
-                    parent=self
-                )
+                if is_active:
+                    messagebox.showinfo(
+                        "Settings Updated!",
+                        f"Riot Games settings and session for '{acc_name}' have been updated successfully!\n\n"
+                        "All latest preferences and tokens are saved to this profile.",
+                        parent=self
+                    )
+                else:
+                    messagebox.showinfo(
+                        "Re-Linked Successfully!",
+                        f"Session for '{acc_name}' has been restored and updated successfully!\n"
+                        "You can now switch to this account with 1 click.",
+                        parent=self
+                    )
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to update session: {e}", parent=self)
 

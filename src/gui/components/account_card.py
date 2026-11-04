@@ -299,10 +299,19 @@ class AccountCard(ctk.CTkFrame):
         )
         edit_btn.pack(side="left", padx=2)
 
-        # Icon Button 2: Refresh Session Token (🔄) - Highlighted if needs reauth
-        refresh_fg = "#78350f" if self.account.needs_reauth else Theme.SURFACE
-        refresh_hover = "#92400e" if self.account.needs_reauth else Theme.SURFACE_HOVER
-        refresh_border = "#d97706" if self.account.needs_reauth else Theme.CARD_BORDER
+        # Icon Button 2: Refresh / Update Settings (🔄)
+        if self.account.needs_reauth:
+            refresh_fg = "#78350f"
+            refresh_hover = "#92400e"
+            refresh_border = "#d97706"
+        elif self.is_active:
+            refresh_fg = "#064e3b"
+            refresh_hover = "#065f46"
+            refresh_border = "#059669"
+        else:
+            refresh_fg = Theme.SURFACE
+            refresh_hover = Theme.SURFACE_HOVER
+            refresh_border = Theme.CARD_BORDER
 
         refresh_btn = ctk.CTkButton(
             actions_frame,

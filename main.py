@@ -44,6 +44,14 @@ def cleanup_old_executable():
         vbs_helper = exe_path.parent / "_silent_update.vbs"
         if vbs_helper.is_file():
             vbs_helper.unlink(missing_ok=True)
+
+        import tempfile
+        temp_dir = Path(tempfile.gettempdir())
+        for vbs in temp_dir.glob("riotlink_update_*.vbs"):
+            try:
+                vbs.unlink(missing_ok=True)
+            except OSError:
+                pass
     except Exception:
         pass
 
